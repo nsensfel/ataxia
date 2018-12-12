@@ -67,6 +67,16 @@
    ]
 ).
 
+-export
+(
+   [
+      read_permission/1,
+      write_permission/1,
+      value/1,
+      sequence_meta/1
+   ]
+).
+
 -export([apply_to/2, matches/2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -157,6 +167,19 @@ lor (List) -> #lor{ params = List }.
 -spec neg (basic()) -> basic().
 neg (V) -> #neg{ param = V }.
 
+
+
+-spec sequence_meta (list(meta())) -> meta().
+sequence_meta (List) -> #mseq{ ops = List }.
+
+-spec read_permission (basic()) -> meta().
+read_permission (OP) -> #read_perm{ op = OP }.
+
+-spec write_permission (basic()) -> meta().
+write_permission (OP) -> #write_perm{ op = OP }.
+
+-spec value (basic()) -> meta().
+value (OP) -> #value{ op = OP }.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
