@@ -8,8 +8,8 @@
 (
    entry,
    {
-      last_id :: binary(),
-      freed_ids :: list(binary())
+      last_id :: ataxia_id:type(),
+      freed_ids :: list(ataxia_id:type())
    }
 ).
 
@@ -48,49 +48,15 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec next_char (integer()) -> integer().
-next_char ($9) -> $a;
-next_char ($z) -> $A;
-next_char ($Z) -> $0;
-next_char (C) -> (C + 1).
-
--spec next_id_internal
-   (
-      list(integer()),
-      boolean(),
-      list(integer())
-   )
-   -> list(integer()).
-next_id_internal ([], true, Result) -> [$0|Result];
-next_id_internal ([], false, Result) -> Result;
-next_id_internal ([$Z|Next], true, Result) ->
-   next_id_internal(Next, true, [$0|Result]);
-next_id_internal ([Char|Next], true, Result) ->
-   next_id_internal(Next, false, [next_char(Char)|Result]);
-next_id_internal ([Char|Next], false, Result) ->
-   next_id_internal(Next, false, [Char|Result]).
-
--spec next_id (binary()) -> binary().
-next_id (ID) ->
-   list_to_binary
-   (
-      next_id_internal
-      (
-         lists:reverse(binary:bin_to_list(ID)),
-         true,
-         []
-      )
-   ).
-
 -spec new_entry () -> entry().
 new_entry () ->
    #entry
    {
-      last_id = <<"">>,
+      last_id = ataxia_id:null(),
       freed_ids = []
    }.
 
--spec allocate_id_in_entry (entry()) -> {entry(), binary()}.
+-spec allocate_id_in_entry (entry()) -> {entry(), ataxia_id:type()}.
 allocate_id_in_entry (Entry) ->
    case Entry#entry.freed_ids of
       [] ->
@@ -112,7 +78,7 @@ allocate_id_in_entry (Entry) ->
       atom(),
       dict:dict(atom(), entry())
    )
-   -> {dict:dict(atom(), entry()), binary()}.
+   -> {dict:dict(atom(), entry()), ataxia_id:type()}.
 allocate_id (DB, State) ->
    S0Entry =
       case dict:find(DB, State) of
@@ -128,7 +94,7 @@ allocate_id (DB, State) ->
 
 -spec free_id
    (
-      binary(),
+      ataxia_id:type(),
       atom(),
       dict:dict(atom(), entry())
    )
@@ -185,7 +151,7 @@ handle_info(_, State) ->
    {noreply, State}.
 
 %%%% Interface Functions
--spec allocate (atom()) -> binary().
+-spec allocate (atom()) -> ataxia_id:type().
 allocate (DB) ->
    {allocated_id, Result} =
       gen_server:call({global, ataxia_id_manager}, {allocate, DB}),
@@ -194,7 +160,7 @@ allocate (DB) ->
 
    Result.
 
--spec free (binary(), atom()) -> 'ok'.
+-spec free (ataxia_id:type(), atom()) -> 'ok'.
 free (ID, DB) ->
    gen_server:cast({global, ataxia_id_manager}, {free, ID, DB}),
 
