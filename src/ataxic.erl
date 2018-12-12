@@ -67,11 +67,50 @@
    ]
 ).
 
--export([apply_to/2]).
+-export([apply_to/2, matches/2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec basic_apply_to (basic(), any()) -> any().
+basic_apply_to (#field{ ix = IX, op = OP}, Val) ->
+   setelement(IX, Val, basic_apply_to(OP, element(IX, Val)));
+basic_apply_to (#array_cell{ ix = IX, op = OP }, Val) ->
+   array:set(IX, basic_apply_to(OP, array:get(IX, Val)), Val);
+
+basic_apply_to (#seq{ ops = List }, Val) ->
+   lists:foldl(fun basic_apply_to/2, Val, List);
+
+basic_apply_to (#list_append { values = List, head = Head }, Val) ->
+   case Head of
+      true -> (List ++ Val);
+      _ -> (Val ++ List)
+   end;
+
+basic_apply_to (#const{ value = Val }, _Val) ->
+   Val;
+basic_apply_to (#current{}, Val) ->
+   Val;
+
+basic_apply_to (#ge{ p0 = P0, p1 = P1 }, _Val) ->
+   P0 >= P1;
+basic_apply_to (#gt{ p0 = P0, p1 = P1 }, _Val) ->
+   P0 > P1;
+basic_apply_to (#le{ p0 = P0, p1 = P1 }, _Val) ->
+   P0 =< P1;
+basic_apply_to (#lt{ p0 = P0, p1 = P1 }, _Val) ->
+   P0 < P1;
+basic_apply_to (#eq{ p0 = P0, p1 = P1 }, _Val) ->
+   P0 == P1;
+
+basic_apply_to (#land{ params = List }, _Val) ->
+   lists:all(fun (E) -> E end, List);
+
+basic_apply_to (#lor{ params = List }, _Val) ->
+   lists:any(fun (E) -> E end, List);
+
+basic_apply_to (#neg{ param = V }, _Val) ->
+   not V.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -120,42 +159,41 @@ neg (V) -> #neg{ param = V }.
 
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec apply_to (basic(), any()) -> any().
-apply_to (#field{ ix = IX, op = OP}, Val) ->
-   setelement(IX, Val, apply_to(OP, element(IX, Val)));
-apply_to (#array_cell{ ix = IX, op = OP }, Val) ->
-   array:set(IX, apply_to(OP, array:get(IX, Val)), Val);
+-spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
+apply_to (#read_perm{ op = OP }, Entry) ->
+   ataxia_entry:set_read_permission
+   (
+      basic_apply_to(OP, ataxia_entry:get_read_permission(Entry)),
+      Entry
+   );
+apply_to (#write_perm{ op = OP }, Entry) ->
+   ataxia_entry:set_write_permission
+   (
+      basic_apply_to(OP, ataxia_entry:get_write_permission(Entry)),
+      Entry
+   );
+apply_to (#value{ op = OP }, Entry) ->
+   ataxia_entry:set_value
+   (
+      basic_apply_to(OP, ataxia_entry:get_value(Entry)),
+      Entry
+   );
+apply_to (#mseq { ops = List }, Entry) ->
+   lists:foldl(fun apply_to/2, Entry, List).
 
-apply_to (#seq{ ops = List }, Val) ->
-   lists:foldl(fun apply_to/2, Val, List);
-
-apply_to (#list_append { values = List, head = Head }, Val) ->
-   case Head of
-      true -> (List ++ Val);
-      _ -> (Val ++ List)
+-spec matches (meta(), ataxia_entry:type()) -> boolean().
+matches (#read_perm{ op = OP }, Entry) ->
+   case basic_apply_to(OP, ataxia_entry:get_read_permission(Entry)) of
+      true -> true;
+      _ -> false
    end;
-
-apply_to (#const{ value = Val }, _Val) ->
-   Val;
-apply_to (#current{}, Val) ->
-   Val;
-
-apply_to (#ge{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 >= P1;
-apply_to (#gt{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 > P1;
-apply_to (#le{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 =< P1;
-apply_to (#lt{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 < P1;
-apply_to (#eq{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 == P1;
-
-apply_to (#land{ params = List }, _Val) ->
-   lists:all(fun (E) -> E end, List);
-
-apply_to (#lor{ params = List }, _Val) ->
-   lists:any(fun (E) -> E end, List);
-
-apply_to (#neg{ param = V }, _Val) ->
-   not V.
+matches (#write_perm{ op = OP }, Entry) ->
+   case basic_apply_to(OP, ataxia_entry:get_write_permission(Entry)) of
+      true -> true;
+      _ -> false
+   end;
+matches (#value{ op = OP }, Entry) ->
+   case basic_apply_to(OP, ataxia_entry:get_value(Entry)) of
+      true -> true;
+      _ -> false
+   end.

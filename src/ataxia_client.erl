@@ -13,9 +13,9 @@
       insert_at/5,
       insert/4,
       remove/3,
-      fetch/3,
+      fetch/4,
       reserve/3,
-      commit/1
+      commit/4
    ]
 ).
 
@@ -44,26 +44,26 @@ get_db_node_for (_ObjectID) ->
       ataxia_security:permission(),
       any()
    )
-   -> 'ok'.
-insert_at (DB, ObjectID, ReadPerm, WritePerm, Value) ->
-   DBNode = get_db_node_for(ObjectID),
+   -> ({'aborted', any()} | 'ok').
+insert_at (DB, ID, ReadPerm, WritePerm, Value) ->
+   DBNode = get_db_node_for(ID),
 
-   {atomic, _} =
+   Reply =
       rpc:call
       (
          DBNode,
-         db_access,
+         atexia_server,
          insert_at,
-         [DB, ObjectID, ReadPerm, WritePerm, Value]
+         [DB, ID, ReadPerm, WritePerm, Value]
       ),
 
    io:format
    (
-      "~nshr_database:insert_at(~p) ! ~p -> ok.~n",
-      [{DB, ObjectID, ReadPerm, WritePerm, Value}, DBNode]
+      "~nshr_database:insert_at(~p) ! ~p -> ~p.~n",
+      [{DB, ID, ReadPerm, WritePerm, Value}, DBNode, Reply]
    ),
 
-   ok.
+   Reply.
 
 -spec insert
    (
@@ -72,12 +72,12 @@ insert_at (DB, ObjectID, ReadPerm, WritePerm, Value) ->
       ataxia_security:permission(),
       any()
    )
-   -> {'ok', binary()}.
+   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
 insert (DB, ReadPerm, WritePerm, Value) ->
    DBNode = get_random_db_node(),
 
-   {atomic, {ok, ID}} =
-      rpc:call(DBNode, db_access, insert, [DB, ReadPerm, WritePerm, Value]),
+   Reply =
+      rpc:call(DBNode, atexia_server, insert, [DB, ReadPerm, WritePerm, Value]),
 
    io:format
    (
@@ -85,74 +85,86 @@ insert (DB, ReadPerm, WritePerm, Value) ->
       [{DB, ReadPerm, WritePerm, Value}, DBNode]
    ),
 
-   {ok, ID}.
+   Reply.
 
 -spec fetch
    (
       atom(),
-      binary(),
-      ataxia_security:user()
+      ataxia_security:user(),
+      ataxic:type(),
+      ataxia_id:type()
    )
    -> ({'ok', any()} | 'not_found').
-fetch (DB, ObjectID, Cred) ->
-   DBNode = get_db_node_for(ObjectID),
+fetch (DB, User, Selector, ID) ->
+   DBNode = get_db_node_for(ID),
 
-   {atomic, Reply} = rpc:call(DBNode, db_access, read, [DB, ObjectID, Cred]),
+   Reply = rpc:call(DBNode, atexia_server, read, [DB, User, Selector, ID]),
 
    io:format
    (
       "~nshr_database:fetch(~p) ! ~p -> ~p.~n",
-      [{DB, ObjectID, Cred}, DBNode, Reply]
+      [{DB, User, Selector, ID}, DBNode, Reply]
    ),
 
    Reply.
 
--spec commit (shr_db_query:type()) -> 'ok'.
-commit (Query) ->
-   DBNode = get_db_node_for(shr_db_query:get_entry_id(Query)),
+-spec commit
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxiac:meta(),
+      ataxia_id:type()
+   )
+   -> ('ok' | 'not_found').
+commit (DB, User, Op, ID) ->
+   DBNode = get_db_node_for(ID),
 
-   {atomic, ok} = rpc:call(DBNode, db_access, query, [Query]),
+   Reply = rpc:call(DBNode, atexia_server, query, [DB, User, Op, ID]),
 
-   io:format("~nshr_database:commit(~p) ! ~p -> ok.~n", [Query, DBNode]),
+   io:format
+   (
+      "~nataxia_client:commit(~p) ! ~p -> ~p.~n",
+      [{DB, User, Op, ID}, DBNode, Reply]
+   ),
 
-   ok.
+   Reply.
 
 -spec remove
    (
       atom(),
-      binary(),
-      ataxia_security:user()
+      ataxia_security:user(),
+      ataxia_id:type()
    )
    -> ('ok' | 'not_found').
-remove (DB, ObjectID, Cred) ->
-   DBNode = get_db_node_for(ObjectID),
+remove (DB, User, ID) ->
+   DBNode = get_db_node_for(ID),
 
-   {atomic, _} = rpc:call(DBNode, db_access, remove, [DB, ObjectID, Cred]),
+   Reply = rpc:call(DBNode, atexia_server, remove, [DB, User, ID]),
 
    io:format
    (
-      "~nshr_database:remove(~p) ! ~p -> ok.~n",
-      [{DB, ObjectID, Cred}, DBNode]
+      "~nataxia_client:remove(~p) ! ~p -> ~p.~n",
+      [{DB, User, ID}, DBNode, Reply]
    ),
 
-   ok.
+   Reply.
 
 -spec reserve
    (
       atom(),
-      binary(),
-      ataxia_security:user()
+      ataxia_security:user(),
+      ataxia_id:type()
    )
-   -> ('ok' | 'not_found').
-reserve (DB, ObjectID, Cred) ->
-   DBNode = get_db_node_for(ObjectID),
+   -> ('ok' | 'unavailable').
+reserve (DB, User, ID) ->
+   DBNode = get_db_node_for(ID),
 
-   {atomic, _} = rpc:call(DBNode, db_access, reserve, [DB, ObjectID, Cred]),
+   Reply = rpc:call(DBNode, atexia_server, reserve, [DB, User, ID]),
 
    io:format
    (
-      "~nshr_database:reserve(~p) ! ~p -> ok.~n",
-      [{DB, ObjectID, Cred}, DBNode]
+      "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
+      [{DB, User, ID}, DBNode, Reply]
    ),
 
-   ok.
+   Reply.

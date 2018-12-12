@@ -18,6 +18,7 @@
       query/1
    ]
 ).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -49,33 +50,34 @@ add_new_item (DB, Item) ->
 -spec read
    (
       atom(),
+      ataxia_security:user(),
       ataxic:type(),
-      binary(),
-      ataxia_security:user()
+      ataxia_id:type()
    )
    -> ({'aborted', any()} | {'ok', any()} | 'not_found').
-read (ID, Selector, User, DB) ->
+read (DB, User, Selector, ID) ->
    case mnesia:transaction(fun mnesia:read/2, [DB, ID]) of
       {'atomic', []} -> 'not_found';
-      {'atomic', [Item]} ->
+      {'atomic', [Entry]} ->
          true =
             ataxia_security:can_access
             (
                User,
-               ataxia_entry:get_read_permission(Item)
+               ataxia_entry:get_read_permission(Entry)
             ),
-         {ok, ataxic:apply_to(Selector, ataxia_entry:get_value(Item))};
+         {ok, ataxic:apply_to(Selector, ataxia_entry:get_value(Entry))};
 
       Other -> {'aborted', Other}
    end.
 
 -spec insert_at
    (
-      atom(),
-      binary(),
+      ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
-      any())
+      any(),
+      atom()
+   )
    -> ({'aborted', any()} | 'ok').
 insert_at (DB, ID, ReadPerm, WritePerm, Value) ->
    Item = ataxia_entry:new(ID, ReadPerm, WritePerm, Value),
@@ -90,7 +92,7 @@ insert_at (DB, ID, ReadPerm, WritePerm, Value) ->
       ataxia_security:permission(),
       ataxia_security:permission(),
       any())
-   -> ({'aborted', any()} | {'ok', binary()}).
+   -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
 insert (DB, ReadPerm, WritePerm, Value) ->
    ID = db_item_ids_manager:allocate(DB),
    case insert_at(DB, ID, ReadPerm, WritePerm, Value) of
@@ -105,17 +107,17 @@ query (Query) ->
 -spec reserve
    (
       atom(),
-      binary(),
-      ataxia_security:user()
+      ataxia_security:user(),
+      ataxia_id:type()
    )
-   -> ({'aborted', any()} | {'atomic', 'ok'}).
-reserve (DB, ID, Cred) ->
+   -> ({'aborted', any()} | 'ok').
+reserve (DB, User, ID) ->
    insert_at
    (
       DB,
       ID,
-      [Cred],
-      [Cred],
+      [User],
+      [User],
       {
          reserved,
          <<"?">> %% TODO [FUNCTION: db][LOW]: timestamp
@@ -125,11 +127,11 @@ reserve (DB, ID, Cred) ->
 -spec remove
    (
       atom(),
-      binary(),
-      ataxia_security:user()
+      ataxia_security:user(),
+      ataxia_id:type()
    )
    -> ({'aborted', any()} | 'ok' | 'not_found').
-remove (_DB, _ID, _Cred) ->
+remove (_DB, _User, _ID) ->
    %% TODO [FUNCTION: db][MEDIUM]: unimplemented
    %% Don't forget to checkt that Cred has write access before removing the
    %% value.
