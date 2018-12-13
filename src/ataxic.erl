@@ -7,16 +7,23 @@
 %%%% BASIC OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Select
 -record(field, {ix :: non_neg_integer(), op :: basic()}).
--record(array_cell, {ix :: non_neg_integer(), op :: basic()}).
 
 %%%% Sequence of instructions
 -record(seq, {ops :: list(basic())}).
 
 %%%% List
--record(list_append, {values :: list(any()), head :: boolean()}).
-
 -record(const, {value :: any()}).
 -record(current, {}).
+
+-record
+(
+   apply_fun,
+   {
+      module :: atom(),
+      function :: atom(),
+      params :: list(basic())
+   }
+).
 
 %%%% Number Comparison
 -record(gt, {p0 :: basic(), p1 :: basic()}).
@@ -51,9 +58,8 @@
 (
    [
       on_field/2,
-      on_array_cell/2,
+      apply_function/3,
       sequence/1,
-      append_to_list/2,
       constant/1,
       current_value/0,
       ge/2,
@@ -85,17 +91,16 @@
 -spec basic_apply_to (basic(), any()) -> any().
 basic_apply_to (#field{ ix = IX, op = OP}, Val) ->
    setelement(IX, Val, basic_apply_to(OP, element(IX, Val)));
-basic_apply_to (#array_cell{ ix = IX, op = OP }, Val) ->
-   array:set(IX, basic_apply_to(OP, array:get(IX, Val)), Val);
+basic_apply_to (#apply_fun{ module = M, function = F, params = P }, Val) ->
+   erlang:apply
+   (
+      M,
+      F,
+      lists:map(fun (Param) -> basic_apply_to(Param, Val) end, P)
+   );
 
 basic_apply_to (#seq{ ops = List }, Val) ->
    lists:foldl(fun basic_apply_to/2, Val, List);
-
-basic_apply_to (#list_append { values = List, head = Head }, Val) ->
-   case Head of
-      true -> (List ++ Val);
-      _ -> (Val ++ List)
-   end;
 
 basic_apply_to (#const{ value = Val }, _Val) ->
    Val;
@@ -128,14 +133,12 @@ basic_apply_to (#neg{ param = V }, _Val) ->
 -spec on_field (non_neg_integer(), basic()) -> basic().
 on_field (IX, OP) -> #field{ ix = IX, op = OP }.
 
--spec on_array_cell (non_neg_integer(), basic()) -> basic().
-on_array_cell (IX, OP) -> #array_cell{ ix = IX, op = OP }.
-
 -spec sequence (list(basic())) -> basic().
 sequence (List) -> #seq{ ops = List }.
 
--spec append_to_list (list(any()), boolean()) -> basic().
-append_to_list (List, Head) -> #list_append { values = List, head = Head }.
+-spec apply_function (atom(), atom(), list(basic())) -> basic().
+apply_function (Module, Function, Params) ->
+   #apply_fun{ module = Module, function = Function, params = Params}.
 
 -spec constant (any()) -> basic().
 constant (Val) -> #const{ value = Val }.

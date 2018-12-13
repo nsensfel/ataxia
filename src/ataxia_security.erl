@@ -14,6 +14,7 @@
 
 -export([can_access/2]).
 -export([janitor/0, any/0, admin/0, user_from_id/1]).
+-export([unlocked/0]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -33,6 +34,9 @@ any () -> any.
 
 -spec admin () -> user().
 admin () -> admin.
+
+-spec unlocked () -> atom().
+unlocked () -> none.
 
 -spec can_access (permission(), user()) -> boolean().
 can_access (_, admin) -> true;
