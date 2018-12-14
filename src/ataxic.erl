@@ -7,6 +7,7 @@
 %%%% BASIC OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Select
 -record(field, {ix :: non_neg_integer(), op :: basic()}).
+-record(upfield, {ix :: non_neg_integer(), op :: basic()}).
 
 %%%% Sequence of instructions
 -record(seq, {ops :: list(basic())}).
@@ -57,7 +58,8 @@
 -export
 (
    [
-      on_field/2,
+      update_field/2,
+      field/2,
       apply_function/3,
       sequence/1,
       constant/1,
@@ -89,8 +91,10 @@
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec basic_apply_to (basic(), any()) -> any().
-basic_apply_to (#field{ ix = IX, op = OP}, Val) ->
+basic_apply_to (#upfield{ ix = IX, op = OP}, Val) ->
    setelement(IX, Val, basic_apply_to(OP, element(IX, Val)));
+basic_apply_to (#field{ ix = IX, op = OP}, Val) ->
+   basic_apply_to(OP, element(IX, Val));
 basic_apply_to (#apply_fun{ module = M, function = F, params = P }, Val) ->
    erlang:apply
    (
@@ -130,8 +134,11 @@ basic_apply_to (#neg{ param = V }, _Val) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec on_field (non_neg_integer(), basic()) -> basic().
-on_field (IX, OP) -> #field{ ix = IX, op = OP }.
+-spec update_field (non_neg_integer(), basic()) -> basic().
+update_field (IX, OP) -> #upfield{ ix = IX, op = OP }.
+
+-spec field (non_neg_integer(), basic()) -> basic().
+field (IX, OP) -> #field{ ix = IX, op = OP }.
 
 -spec sequence (list(basic())) -> basic().
 sequence (List) -> #seq{ ops = List }.
@@ -207,19 +214,9 @@ apply_to (#value{ op = OP }, Entry) ->
 apply_to (#mseq { ops = List }, Entry) ->
    lists:foldl(fun apply_to/2, Entry, List).
 
--spec matches (meta(), ataxia_entry:type()) -> boolean().
-matches (#read_perm{ op = OP }, Entry) ->
-   case basic_apply_to(OP, ataxia_entry:get_read_permission(Entry)) of
-      true -> true;
-      _ -> false
-   end;
-matches (#write_perm{ op = OP }, Entry) ->
-   case basic_apply_to(OP, ataxia_entry:get_write_permission(Entry)) of
-      true -> true;
-      _ -> false
-   end;
-matches (#value{ op = OP }, Entry) ->
-   case basic_apply_to(OP, ataxia_entry:get_value(Entry)) of
+-spec matches (basic(), ataxia_entry:type()) -> boolean().
+matches (OP, Entry) ->
+   case basic_apply_to(OP, Entry) of
       true -> true;
       _ -> false
    end.
