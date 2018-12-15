@@ -14,19 +14,19 @@
       add_at/5,
       reserve/3,
 
-      fetch/4,
+      fetch/3,
       update/4,
-      lock/4,
+      update_and_fetch/4,
       remove/3,
 
-      fetch_any/4,
+      fetch_any/3,
       update_any/4,
-      lock_any/4,
+      update_and_fetch_any/4,
       remove_any/3,
 
-      fetch_all/4,
+      fetch_all/3,
       update_all/4,
-      lock_all/4,
+      update_and_fetch_all/4,
       remove_all/3
    ]
 ).
@@ -64,7 +64,7 @@ add_at (DB, ID, ReadPerm, WritePerm, Value) ->
       rpc:call
       (
          DBNode,
-         atexia_server,
+         ataxia_server,
          add_at,
          [DB, ID, ReadPerm, WritePerm, Value]
       ),
@@ -89,7 +89,7 @@ add (DB, ReadPerm, WritePerm, Value) ->
    DBNode = get_random_db_node(),
 
    Reply =
-      rpc:call(DBNode, atexia_server, add, [DB, ReadPerm, WritePerm, Value]),
+      rpc:call(DBNode, ataxia_server, add, [DB, ReadPerm, WritePerm, Value]),
 
    io:format
    (
@@ -109,7 +109,7 @@ add (DB, ReadPerm, WritePerm, Value) ->
 reserve (DB, User, ID) ->
    DBNode = get_db_node_for(ID),
 
-   Reply = rpc:call(DBNode, atexia_server, reserve, [DB, User, ID]),
+   Reply = rpc:call(DBNode, ataxia_server, reserve, [DB, User, ID]),
 
    io:format
    (
@@ -125,19 +125,18 @@ reserve (DB, User, ID) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxic:type(),
       ataxia_id:type()
    )
    -> ({'ok', any()} | 'not_found').
-fetch (DB, User, Selector, ID) ->
+fetch (DB, User, ID) ->
    DBNode = get_db_node_for(ID),
 
-   Reply = rpc:call(DBNode, atexia_server, fetch, [DB, User, Selector, ID]),
+   Reply = rpc:call(DBNode, ataxia_server, fetch, [DB, User, ID]),
 
    io:format
    (
       "~nataxia_client:fetch(~p) ! ~p -> ~p.~n",
-      [{DB, User, Selector, ID}, DBNode, Reply]
+      [{DB, User, ID}, DBNode, Reply]
    ),
 
    Reply.
@@ -146,14 +145,14 @@ fetch (DB, User, Selector, ID) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxiac:meta(),
+      ataxic:meta(),
       ataxia_id:type()
    )
    -> ('ok' | 'not_found').
 update (DB, User, Op, ID) ->
    DBNode = get_db_node_for(ID),
 
-   Reply = rpc:call(DBNode, atexia_server, update, [DB, User, Op, ID]),
+   Reply = rpc:call(DBNode, ataxia_server, update, [DB, User, Op, ID]),
 
    io:format
    (
@@ -163,23 +162,24 @@ update (DB, User, Op, ID) ->
 
    Reply.
 
--spec lock
+-spec update_and_fetch
    (
       atom(),
       ataxia_security:user(),
-      ataxia_time:type(),
+      ataxic:meta(),
       ataxia_id:type()
    )
-   -> ('ok' | 'not_found').
-lock (DB, User, Duration, ID) ->
+   -> ({'ok', any()} | 'not_found').
+update_and_fetch (DB, User, Op, ID) ->
    DBNode = get_db_node_for(ID),
 
-   Reply = rpc:call(DBNode, atexia_server, lock, [DB, User, Duration, ID]),
+   Reply =
+      rpc:call(DBNode, ataxia_server, update_and_fetch, [DB, User, Op, ID]),
 
    io:format
    (
-      "~nataxia_client:lock(~p) ! ~p -> ~p.~n",
-      [{DB, User, Duration, ID}, DBNode, Reply]
+      "~nataxia_client:update_and_fetch(~p) ! ~p -> ~p.~n",
+      [{DB, User, Op, ID}, DBNode, Reply]
    ),
 
    Reply.
@@ -195,7 +195,7 @@ lock (DB, User, Duration, ID) ->
 remove (DB, User, ID) ->
    DBNode = get_db_node_for(ID),
 
-   Reply = rpc:call(DBNode, atexia_server, remove, [DB, User, ID]),
+   Reply = rpc:call(DBNode, ataxia_server, remove, [DB, User, ID]),
 
    io:format
    (
@@ -210,27 +210,19 @@ remove (DB, User, ID) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxic:type(),
-      ataxic:meta()
+      ataxic:basic()
    )
    -> ({'ok', ataxia_id:type(), any()} | 'not_found').
-fetch_any (DB, User, Selector, Condition) ->
+fetch_any (DB, User, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
 
-   Reply =
-      rpc:call
-      (
-         DBNode,
-         atexia_server,
-         fetch_any,
-         [DB, User, Selector, Condition]
-      ),
+   Reply = rpc:call(DBNode, ataxia_server, fetch_any, [DB, User, Condition]),
 
    io:format
    (
       "~nataxia_client:fetch_any(~p) ! ~p -> ~p.~n",
-      [{DB, User, Selector, Condition}, DBNode, Reply]
+      [{DB, User, Condition}, DBNode, Reply]
    ),
 
    Reply.
@@ -239,8 +231,8 @@ fetch_any (DB, User, Selector, Condition) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxiac:meta(),
-      ataxiac:meta()
+      ataxic:meta(),
+      ataxic:basic()
    )
    -> ({'ok', ataxia_id:type()} | 'not_found').
 update_any (DB, User, Op, Condition) ->
@@ -248,7 +240,7 @@ update_any (DB, User, Op, Condition) ->
    DBNode = get_db_node_for(<<"">>),
 
    Reply =
-      rpc:call(DBNode, atexia_server, update_any, [DB, User, Op, Condition]),
+      rpc:call(DBNode, ataxia_server, update_any, [DB, User, Op, Condition]),
 
    io:format
    (
@@ -258,15 +250,15 @@ update_any (DB, User, Op, Condition) ->
 
    Reply.
 
--spec lock_any
+-spec update_and_fetch_any
    (
       atom(),
       ataxia_security:user(),
-      ataxia_time:type(),
-      ataxic:meta()
+      ataxic:meta(),
+      ataxic:basic()
    )
-   -> ({'ok', ataxia_id:type()} | 'not_found').
-lock_any (DB, User, Duration, Condition) ->
+   -> ({'ok', any(), ataxia_id:type()} | 'not_found').
+update_and_fetch_any (DB, User, Op, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
 
@@ -274,31 +266,32 @@ lock_any (DB, User, Duration, Condition) ->
       rpc:call
       (
          DBNode,
-         atexia_server,
-         lock_any,
-         [DB, User, Duration, Condition]
+         ataxia_server,
+         update_and_fetch_any,
+         [DB, User, Op, Condition]
       ),
 
    io:format
    (
-      "~nataxia_client:lock_any(~p) ! ~p -> ~p.~n",
-      [{DB, User, Duration, Condition}, DBNode, Reply]
+      "~nataxia_client:update_and_fetch(~p) ! ~p -> ~p.~n",
+      [{DB, User, Op, Condition}, DBNode, Reply]
    ),
 
    Reply.
+
 
 -spec remove_any
    (
       atom(),
       ataxia_security:user(),
-      ataxic:meta()
+      ataxic:basic()
    )
    -> ({'ok', ataxia_id:type()} | 'not_found').
 remove_any (DB, User, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
 
-   Reply = rpc:call(DBNode, atexia_server, remove_any, [DB, User, Condition]),
+   Reply = rpc:call(DBNode, ataxia_server, remove_any, [DB, User, Condition]),
 
    io:format
    (
@@ -313,27 +306,19 @@ remove_any (DB, User, Condition) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxic:type(),
-      ataxic:meta()
+      ataxic:basic()
    )
    -> ({'ok', list({ataxia_id:type(), any()})}).
-fetch_all (DB, User, Selector, Condition) ->
+fetch_all (DB, User, Condition) ->
    % TODO: Try all nodes one by one, apply to all they matching items.
    DBNode = get_db_node_for(<<"">>),
 
-   Reply =
-      rpc:call
-      (
-         DBNode,
-         atexia_server,
-         fetch_all,
-         [DB, User, Selector, Condition]
-      ),
+   Reply = rpc:call ( DBNode, ataxia_server, fetch_all, [DB, User, Condition]),
 
    io:format
    (
       "~nataxia_client:fetch_all(~p) ! ~p -> ~p.~n",
-      [{DB, User, Selector, Condition}, DBNode, Reply]
+      [{DB, User, Condition}, DBNode, Reply]
    ),
 
    Reply.
@@ -342,8 +327,8 @@ fetch_all (DB, User, Selector, Condition) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxiac:meta(),
-      ataxiac:meta()
+      ataxic:meta(),
+      ataxic:basic()
    )
    -> {'ok', list(ataxia_id:type())}.
 update_all (DB, User, Op, Condition) ->
@@ -351,7 +336,7 @@ update_all (DB, User, Op, Condition) ->
    DBNode = get_db_node_for(<<"">>),
 
    Reply =
-      rpc:call(DBNode, atexia_server, update_all, [DB, User, Op, Condition]),
+      rpc:call(DBNode, ataxia_server, update_all, [DB, User, Op, Condition]),
 
    io:format
    (
@@ -361,15 +346,15 @@ update_all (DB, User, Op, Condition) ->
 
    Reply.
 
--spec lock_all
+-spec update_and_fetch_all
    (
       atom(),
       ataxia_security:user(),
-      ataxia_time:type(),
-      ataxic:meta()
+      ataxic:meta(),
+      ataxic:basic()
    )
-   -> {'ok', list(ataxia_id:type())}.
-lock_all (DB, User, Duration, Condition) ->
+   -> {'ok', list({any(), ataxia_id:type()})}.
+update_and_fetch_all (DB, User, Op, Condition) ->
    % TODO: Try all nodes one by one, apply to all they matching items.
    DBNode = get_db_node_for(<<"">>),
 
@@ -377,15 +362,15 @@ lock_all (DB, User, Duration, Condition) ->
       rpc:call
       (
          DBNode,
-         atexia_server,
-         lock_all,
-         [DB, User, Duration, Condition]
+         ataxia_server,
+         update_and_fetch_all,
+         [DB, User, Op, Condition]
       ),
 
    io:format
    (
-      "~nataxia_client:lock_all(~p) ! ~p -> ~p.~n",
-      [{DB, User, Duration, Condition}, DBNode, Reply]
+      "~nataxia_client:update_and_fetch(~p) ! ~p -> ~p.~n",
+      [{DB, User, Op, Condition}, DBNode, Reply]
    ),
 
    Reply.
@@ -394,14 +379,14 @@ lock_all (DB, User, Duration, Condition) ->
    (
       atom(),
       ataxia_security:user(),
-      ataxic:meta()
+      ataxic:basic()
    )
    -> {'ok', list(ataxia_id:type())}.
 remove_all (DB, User, Condition) ->
    % TODO: Try all nodes one by one, apply to all they matching items.
    DBNode = get_db_node_for(<<"">>),
 
-   Reply = rpc:call(DBNode, atexia_server, remove_all, [DB, User, Condition]),
+   Reply = rpc:call(DBNode, ataxia_server, remove_all, [DB, User, Condition]),
 
    io:format
    (
