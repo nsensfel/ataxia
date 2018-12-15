@@ -12,7 +12,7 @@
    [
       add_at/5,
       add/4,
-      reserve/3,
+      reserve/2,
 
       fetch/3,
       update/4,
@@ -61,11 +61,11 @@ add_new_item (DB, Item) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec add_at
    (
+      atom(),
       ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
-      any(),
-      atom()
+      any()
    )
    -> ({'aborted', any()} | 'ok').
 add_at (DB, ID, ReadPerm, WritePerm, Value) ->
@@ -80,34 +80,25 @@ add_at (DB, ID, ReadPerm, WritePerm, Value) ->
       atom(),
       ataxia_security:permission(),
       ataxia_security:permission(),
-      any())
+      any()
+   )
    -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
 add (DB, ReadPerm, WritePerm, Value) ->
-   ID = db_item_ids_manager:allocate(DB),
+   ID = ataxia_id_manager:allocate(DB),
    case add_at(DB, ID, ReadPerm, WritePerm, Value) of
-      {atomic, ok} -> {ok, ID};
+      ok -> {ok, ID};
       {aborted, Val} -> {aborted, Val}
    end.
 
 -spec reserve
    (
       atom(),
-      ataxia_security:user(),
       ataxia_id:type()
    )
    -> ({'aborted', any()} | 'ok').
-reserve (DB, User, ID) ->
-   add_at
-   (
-      DB,
-      ID,
-      [User],
-      [User],
-      {
-         reserved,
-         <<"?">> %% TODO [FUNCTION: db][LOW]: timestamp
-      }
-   ).
+reserve (DB, ID) ->
+   JanitorPermission = ataxia_security:allow_only(ataxia_security:janitor()),
+   add_at(DB, ID, JanitorPermission, JanitorPermission, reserved).
 
 -spec fetch
    (
@@ -115,10 +106,10 @@ reserve (DB, User, ID) ->
       ataxia_security:user(),
       ataxia_id:type()
    )
-   -> ({'aborted', any()} | {'ok', any()} | 'not_found').
+   -> ({'aborted', any()} | {'ok', any()}).
 fetch (DB, User, ID) ->
    case mnesia:transaction(fun mnesia:read/2, [DB, ID]) of
-      {atomic, []} -> not_found;
+      {atomic, []} -> {aborted, not_found};
       {atomic, [Entry]} ->
          true =
             (
@@ -126,8 +117,8 @@ fetch (DB, User, ID) ->
                and
                ataxia_security:can_access
                (
-                  User,
-                  ataxia_entry:get_read_permission(Entry)
+                  ataxia_entry:get_read_permission(Entry),
+                  User
                )
             ),
          {ok, ataxia_entry:get_value(Entry)};
@@ -141,7 +132,7 @@ fetch (DB, User, ID) ->
       ataxia_security:user(),
       ataxic:basic()
    )
-   -> ({'aborted', any()} | {'ok', any(), ataxia_id:type()} | 'not_found').
+   -> ({'aborted', any()} | {'ok', any(), ataxia_id:type()}).
 fetch_any (_DB, _User, _Cond) ->
    {aborted, unimplemented}.
 
@@ -151,7 +142,7 @@ fetch_any (_DB, _User, _Cond) ->
       ataxia_security:user(),
       ataxic:basic()
    )
-   -> ({'aborted', any()} | {'ok', any(), ataxia_id:type()} | 'not_found').
+   -> ({'aborted', any()} | {'ok', any(), ataxia_id:type()}).
 fetch_all (_DB, _User, _Cond) ->
    {aborted, unimplemented}.
 

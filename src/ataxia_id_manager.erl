@@ -60,7 +60,7 @@ new_entry () ->
 allocate_id_in_entry (Entry) ->
    case Entry#entry.freed_ids of
       [] ->
-         NewID = next_id(Entry#entry.last_id),
+         NewID = ataxia_id:next(Entry#entry.last_id),
          {
             Entry#entry{ last_id = NewID },
             NewID

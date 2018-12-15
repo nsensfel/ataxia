@@ -31,16 +31,18 @@ update_array_cell (IX, OP) ->
          ataxic:constant(IX),
          ataxic:sequence
          (
-            ataxic:apply_function
-            (
-               array,
-               get,
-               [
-                  ataxic:constant(IX),
-                  ataxic:current_value()
-               ]
-            ),
-            OP
+            [
+               ataxic:apply_function
+               (
+                  array,
+                  get,
+                  [
+                     ataxic:constant(IX),
+                     ataxic:current_value()
+                  ]
+               ),
+               OP
+            ]
          ),
          ataxic:current_value()
       ]

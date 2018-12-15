@@ -68,7 +68,7 @@ new (ID, ReadPermission, WritePermission, Value) ->
       id = ID,
       read_perm = ReadPermission,
       write_perm = WritePermission,
-      lock = ataxia_security:unlocked(),
+      lock = ataxia_lock:unlocked(),
       val = Value
    }.
 

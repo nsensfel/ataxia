@@ -5,7 +5,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -type named_user() :: {'user', any()}.
 -type user() :: (named_user() | 'admin' | 'any' | 'janitor').
--type permission() :: ordset:ordset(user()).
+-type permission() :: ordsets:ordset(user()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -26,15 +26,15 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec add_access (user(), permission()) -> permission().
 add_access (User, Permission) ->
-   ordset:add_element(User, Permission).
+   ordsets:add_element(User, Permission).
 
 -spec remove_access (user(), permission()) -> permission().
 remove_access (User, Permission) ->
-   ordset:del_element(User, Permission).
+   ordsets:del_element(User, Permission).
 
 -spec allow_only (user()) -> permission().
 allow_only (User) ->
-   ordset:add_element(User, ordset:new()).
+   ordsets:add_element(User, ordsets:new()).
 
 -spec user_from_id (any()) -> user().
 user_from_id (ID) -> {user, ID}.
@@ -54,7 +54,7 @@ can_access (Permission, User) ->
       admin -> true;
       _ ->
          (
-            ordset:is_element(any, Permission)
-            or ordset:is_element(User, Permission)
+            ordsets:is_element(any, Permission)
+            or ordsets:is_element(User, Permission)
          )
    end.
