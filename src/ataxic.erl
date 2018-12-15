@@ -45,6 +45,7 @@
 %%%% Select
 -record(read_perm, {op :: basic()}).
 -record(write_perm, {op :: basic()}).
+-record(lock, {op :: basic()}).
 -record(value, {op :: basic()}).
 
 -record(mseq, {ops :: list(meta())}).
@@ -78,9 +79,10 @@
 -export
 (
    [
-      read_permission/1,
-      write_permission/1,
-      value/1,
+      update_read_permission/1,
+      update_write_permission/1,
+      update_lock/1,
+      update_value/1,
       sequence_meta/1
    ]
 ).
@@ -182,17 +184,32 @@ neg (V) -> #neg{ param = V }.
 -spec sequence_meta (list(meta())) -> meta().
 sequence_meta (List) -> #mseq{ ops = List }.
 
--spec read_permission (basic()) -> meta().
-read_permission (OP) -> #read_perm{ op = OP }.
+-spec update_read_permission (basic()) -> meta().
+update_read_permission (OP) -> #read_perm{ op = OP }.
 
--spec write_permission (basic()) -> meta().
-write_permission (OP) -> #write_perm{ op = OP }.
+-spec update_lock (basic()) -> meta().
+update_lock (OP) -> #lock{ op = OP }.
 
--spec value (basic()) -> meta().
-value (OP) -> #value{ op = OP }.
+-spec update_write_permission (basic()) -> meta().
+update_write_permission (OP) -> #write_perm{ op = OP }.
+
+-spec update_value (basic()) -> meta().
+update_value (OP) -> #value{ op = OP }.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
+apply_to (#value{ op = OP }, Entry) ->
+   ataxia_entry:set_value
+   (
+      basic_apply_to(OP, ataxia_entry:get_value(Entry)),
+      Entry
+   );
+apply_to (#lock{ op = OP }, Entry) ->
+   ataxia_entry:set_lock
+   (
+      basic_apply_to(OP, ataxia_entry:get_lock(Entry)),
+      Entry
+   );
 apply_to (#read_perm{ op = OP }, Entry) ->
    ataxia_entry:set_read_permission
    (
@@ -203,12 +220,6 @@ apply_to (#write_perm{ op = OP }, Entry) ->
    ataxia_entry:set_write_permission
    (
       basic_apply_to(OP, ataxia_entry:get_write_permission(Entry)),
-      Entry
-   );
-apply_to (#value{ op = OP }, Entry) ->
-   ataxia_entry:set_value
-   (
-      basic_apply_to(OP, ataxia_entry:get_value(Entry)),
       Entry
    );
 apply_to (#mseq { ops = List }, Entry) ->
