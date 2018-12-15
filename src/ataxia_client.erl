@@ -12,7 +12,7 @@
    [
       add/4,
       add_at/5,
-      reserve/3,
+      reserve/2,
 
       fetch/3,
       update/4,
@@ -102,19 +102,18 @@ add (DB, ReadPerm, WritePerm, Value) ->
 -spec reserve
    (
       atom(),
-      ataxia_security:user(),
       ataxia_id:type()
    )
    -> ('ok' | 'unavailable').
-reserve (DB, User, ID) ->
+reserve (DB, ID) ->
    DBNode = get_db_node_for(ID),
 
-   Reply = rpc:call(DBNode, ataxia_server, reserve, [DB, User, ID]),
+   Reply = rpc:call(DBNode, ataxia_server, reserve, [DB, ID]),
 
    io:format
    (
       "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
-      [{DB, User, ID}, DBNode, Reply]
+      [{DB, ID}, DBNode, Reply]
    ),
 
    Reply.

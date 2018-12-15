@@ -35,16 +35,27 @@
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%-spec query_transaction (shr_db_query:type()) -> 'ok'.
-%query_transaction (Query) ->
-%   DB = shr_db_query:get_database(Query),
-%   ID = shr_db_query:get_entry_id(Query),
-%   [Item] = mnesia:read(DB, ID),
-%   {ok, UpdatedItem} = shr_db_query:apply_to(Query, Item),
-%
-%   mnesia:write(DB, UpdatedItem, sticky_write),
-%
-%   ok.
+-spec update_internals
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxic:meta(),
+      ataxia_id:type()
+   )
+   -> 'ok'.
+update_internals (DB, User, OP, ID) ->
+   [Entry] = mnesia:read(DB, ID),
+
+   true =
+      ataxia_security:can_access
+      (
+         ataxia_entry:get_write_permission(Entry),
+         User
+      ),
+
+   mnesia:write(DB, ataxic:apply_to(OP, Entry), sticky_write),
+
+   ok.
 
 -spec add_new_item (atom(), ataxia_entry:type()) -> 'ok'.
 add_new_item (DB, Item) ->
@@ -154,8 +165,17 @@ fetch_all (_DB, _User, _Cond) ->
       ataxia_id:type()
    )
    -> ({'aborted', any()} | 'ok').
-update (_DB, _User, _Update, _ID) ->
-   {aborted, unimplemented}.
+update (DB, User, Update, ID) ->
+   case
+      mnesia:transaction
+      (
+         fun update_internals/4,
+         [DB, User, Update, ID]
+      )
+   of
+      {atomic, ok} -> ok;
+      Other -> {aborted, Other}
+   end.
 
 -spec update_any
    (
