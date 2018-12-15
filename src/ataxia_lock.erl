@@ -22,7 +22,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -export_type([type/0]).
 
--export([locked/2, unlocked/0, allows/2]).
+-export([locked/2, unlocked/0, can_access/2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -49,8 +49,8 @@ unlocked () ->
       time = ataxia_time:now()
    }.
 
--spec allows (ataxia_security:user(), type()) -> boolean().
-allows (User, Lock) ->
+-spec can_access (ataxia_security:user(), type()) -> boolean().
+can_access (User, Lock) ->
    case Lock#lock.status of
       none -> true;
       locked ->
