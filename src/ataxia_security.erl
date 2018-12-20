@@ -52,6 +52,7 @@ admin () -> admin.
 can_access (Permission, User) ->
    case User of
       admin -> true;
+      janitor -> ordsets:is_element(User, Permission);
       _ ->
          (
             ordsets:is_element(any, Permission)
