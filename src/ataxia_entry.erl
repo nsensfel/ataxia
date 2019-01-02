@@ -39,6 +39,7 @@
       set_lock/2,
 
       get_id_field/0,
+      get_value_field/0,
       get_read_permission_field/0,
       get_write_permission_field/0,
       get_lock_field/0,
@@ -101,6 +102,9 @@ set_lock (Lock, Item) -> Item#entry{ lock = Lock }.
 
 -spec get_id_field () -> non_neg_integer().
 get_id_field () -> #entry.id.
+
+-spec get_value_field () -> non_neg_integer().
+get_value_field () -> #entry.val.
 
 -spec get_read_permission_field () -> non_neg_integer().
 get_read_permission_field () -> #entry.read_perm.
