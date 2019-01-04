@@ -12,7 +12,8 @@
    [
       add_at/5,
       add/4,
-      reserve/2,
+      reserve/3,
+      reserve/4,
 
       fetch/3,
       update/4,
@@ -104,12 +105,38 @@ add (DB, ReadPerm, WritePerm, Value) ->
 -spec reserve
    (
       atom(),
+      ataxia_security:permission(),
+      ataxia_security:permission(),
       ataxia_id:type()
    )
    -> ({'aborted', any()} | 'ok').
-reserve (DB, ID) ->
-   JanitorPermission = ataxia_security:allow_only(ataxia_security:janitor()),
-   add_at(DB, ID, JanitorPermission, JanitorPermission, reserved).
+reserve (DB, ReadPerm, WritePerm, ID) ->
+   % TODO: spawn or inform janitor
+   add_at
+   (
+      DB,
+      ID,
+      ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
+      ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
+      reserved
+   ).
+
+-spec reserve
+   (
+      atom(),
+      ataxia_security:permission(),
+      ataxia_security:permission()
+   )
+   -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
+reserve (DB, ReadPerm, WritePerm) ->
+   % TODO: spawn or inform janitor
+   add
+   (
+      DB,
+      ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
+      ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
+      reserved
+   ).
 
 -spec fetch
    (

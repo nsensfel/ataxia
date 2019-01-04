@@ -12,7 +12,8 @@
    [
       add/4,
       add_at/5,
-      reserve/2,
+      reserve/3,
+      reserve/4,
 
       fetch/3,
       update/4,
@@ -102,18 +103,41 @@ add (DB, ReadPerm, WritePerm, Value) ->
 -spec reserve
    (
       atom(),
-      ataxia_id:type()
+      ataxia_security:permission(),
+      ataxia_security:permission()
    )
-   -> ('ok' | 'unavailable').
-reserve (DB, ID) ->
-   DBNode = get_db_node_for(ID),
+   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+reserve (DB, ReadPerm, WritePerm) ->
+   DBNode = get_random_db_node(),
 
-   Reply = rpc:call(DBNode, ataxia_server, reserve, [DB, ID]),
+   Reply = rpc:call(DBNode, ataxia_server, reserve, [DB, ReadPerm, WritePerm]),
 
    io:format
    (
       "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
-      [{DB, ID}, DBNode, Reply]
+      [{DB, ReadPerm, WritePerm}, DBNode, Reply]
+   ),
+
+   Reply.
+
+-spec reserve
+   (
+      atom(),
+      ataxia_security:permission(),
+      ataxia_security:permission(),
+      ataxia_id:type()
+   )
+   -> ('ok' |  {'aborted', any()}).
+reserve (DB, ReadPerm, WritePerm, ID) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply =
+      rpc:call(DBNode, ataxia_server, reserve, [DB, ReadPerm, WritePerm, ID]),
+
+   io:format
+   (
+      "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
+      [{DB, ReadPerm, WritePerm, ID}, DBNode, Reply]
    ),
 
    Reply.
