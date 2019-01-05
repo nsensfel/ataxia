@@ -113,25 +113,25 @@ basic_apply_to (#const{ value = Val }, _Val) ->
 basic_apply_to (#current{}, Val) ->
    Val;
 
-basic_apply_to (#ge{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 >= P1;
-basic_apply_to (#gt{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 > P1;
-basic_apply_to (#le{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 =< P1;
-basic_apply_to (#lt{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 < P1;
-basic_apply_to (#eq{ p0 = P0, p1 = P1 }, _Val) ->
-   P0 == P1;
+basic_apply_to (#ge{ p0 = P0, p1 = P1 }, Val) ->
+   basic_apply_to(P0, Val) >= basic_apply_to(P1, Val);
+basic_apply_to (#gt{ p0 = P0, p1 = P1 }, Val) ->
+   basic_apply_to(P0, Val) > basic_apply_to(P1, Val);
+basic_apply_to (#le{ p0 = P0, p1 = P1 }, Val) ->
+   basic_apply_to(P0, Val) =< basic_apply_to(P1, Val);
+basic_apply_to (#lt{ p0 = P0, p1 = P1 }, Val) ->
+   basic_apply_to(P0, Val) < basic_apply_to(P1, Val);
+basic_apply_to (#eq{ p0 = P0, p1 = P1 }, Val) ->
+   basic_apply_to(P0, Val) == basic_apply_to(P1, Val);
 
-basic_apply_to (#land{ params = List }, _Val) ->
-   lists:all(fun (E) -> E end, List);
+basic_apply_to (#land{ params = List }, Val) ->
+   lists:all(fun (E) -> basic_apply_to(E, Val) end, List);
 
-basic_apply_to (#lor{ params = List }, _Val) ->
-   lists:any(fun (E) -> E end, List);
+basic_apply_to (#lor{ params = List }, Val) ->
+   lists:any(fun (E) -> basic_apply_to(E, Val) end, List);
 
-basic_apply_to (#neg{ param = V }, _Val) ->
-   not V.
+basic_apply_to (#neg{ param = V }, Val) ->
+   not basic_apply_to(V, Val).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -227,6 +227,8 @@ apply_to (#mseq { ops = List }, Entry) ->
 
 -spec matches (basic(), ataxia_entry:type()) -> boolean().
 matches (OP, Entry) ->
+   Result = basic_apply_to(OP, Entry),
+   io:format("matches test result:~p~n", [Result]),
    case basic_apply_to(OP, Entry) of
       true -> true;
       _ -> false

@@ -52,8 +52,8 @@ any () -> any.
 -spec admin () -> user().
 admin () -> admin.
 
--spec can_access (permission(), user()) -> boolean().
-can_access (Permission, User) ->
+-spec can_access (user(), permission()) -> boolean().
+can_access (User, Permission) ->
    case User of
       admin -> true;
       janitor -> ordsets:is_element(User, Permission);
