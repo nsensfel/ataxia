@@ -55,7 +55,7 @@ can_access (User, Lock) ->
       none -> true;
       locked ->
          (
-            ataxia_security:can_access(Lock#lock.permission, User)
+            ataxia_security:can_access(User, Lock#lock.permission)
             or ataxia_time:is_past(Lock#lock.time)
          )
    end.
