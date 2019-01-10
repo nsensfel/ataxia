@@ -25,7 +25,7 @@
 -export
 (
    [
-      new/4,
+      new/5,
 
       get_id/1,
       get_read_permission/1,
@@ -61,15 +61,16 @@
       any(),
       ataxia_security:permission(),
       ataxia_security:permission(),
+      ataxia_lock:type(),
       any()
    ) -> type().
-new (ID, ReadPermission, WritePermission, Value) ->
+new (ID, ReadPermission, WritePermission, Lock, Value) ->
    #entry
    {
       id = ID,
       read_perm = ReadPermission,
       write_perm = WritePermission,
-      lock = ataxia_lock:unlocked(),
+      lock = Lock,
       val = Value
    }.
 

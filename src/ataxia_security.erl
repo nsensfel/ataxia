@@ -14,7 +14,16 @@
 
 -export([janitor/0, any/0, admin/0, user_from_id/1]).
 
--export([add_access/2, remove_access/2, allow_only/1, allow_any/0]).
+-export
+(
+   [
+      add_access/2,
+      remove_access/2,
+      allow_only/1,
+      allow_any/0,
+      allow_none/0
+   ]
+).
 -export([can_access/2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -39,6 +48,9 @@ allow_only (User) ->
 -spec allow_any () -> permission().
 allow_any () ->
    ordsets:add_element(any(), ordsets:new()).
+
+-spec allow_none () -> permission().
+allow_none () -> ordsets:new().
 
 -spec user_from_id (any()) -> user().
 user_from_id (ID) -> {user, ID}.

@@ -45,7 +45,7 @@ unlocked () ->
    #lock
    {
       status = none,
-      permission = ataxia_security:allow_only(ataxia_security:any()),
+      permission = ataxia_security:allow_none(),
       time = ataxia_time:now()
    }.
 

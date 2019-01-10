@@ -10,10 +10,23 @@
 -export
 (
    [
+      % Only the user provided
+      add/3,
+      add_at/4,
+      reserve/2,
+      reserve_at/3,
+
+      % Both permissions provided
       add/4,
       add_at/5,
       reserve/3,
+      reserve_at/4,
+
+      % Lock provided
+      add/5,
+      add_at/6,
       reserve/4,
+      reserve_at/5,
 
       fetch/3,
       update/4,
@@ -42,41 +55,80 @@ get_debug_db_node () -> list_to_atom("db_node@" ++ net_adm:localhost()).
 get_random_db_node () ->
    get_debug_db_node().
 
--spec get_db_node_for (binary()) -> node().
+-spec get_db_node_for (ataxia_id:type()) -> node().
 get_db_node_for (_ObjectID) ->
    get_debug_db_node().
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% ADD NEW ELEMENT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%
+%%%% Providing only the user
+%%%%
 -spec add_at
    (
       atom(),
-      binary(),
+      ataxia_id:type(),
+      ataxia_security:user(),
+      any()
+   )
+   -> ({'aborted', any()} | 'ok').
+add_at (DB, ID, User, Value) ->
+   Permission = ataxia_permission:allow_only(User),
+
+   add_at(DB, ID, Permission, Permission, ataxia_lock:unlocked(), Value).
+
+-spec add
+   (
+      atom(),
+      ataxia_security:user(),
+      any()
+   )
+   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+add (DB, User, Value) ->
+   Permission = ataxia_permission:allow_only(User),
+
+   add(DB, Permission, Permission, ataxia_lock:unlocked(), Value).
+
+-spec reserve
+   (
+      atom(),
+      ataxia_security:user()
+   )
+   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+reserve (DB, User) ->
+   Permission = ataxia_permission:allow_only(User),
+
+   reserve (DB, Permission, Permission, ataxia_lock:unlocked()).
+
+-spec reserve_at
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxia_id:type()
+   )
+   -> ('ok' |  {'aborted', any()}).
+reserve_at (DB, User, ID) ->
+   Permission = ataxia_permission:allow_only(User),
+
+   reserve_at (DB, Permission, Permission, ataxia_lock:unlocked(), ID).
+
+%%%%
+%%%% Providing No Lock
+%%%%
+-spec add_at
+   (
+      atom(),
+      ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
       any()
    )
    -> ({'aborted', any()} | 'ok').
 add_at (DB, ID, ReadPerm, WritePerm, Value) ->
-   DBNode = get_db_node_for(ID),
-
-   Reply =
-      rpc:call
-      (
-         DBNode,
-         ataxia_server,
-         add_at,
-         [DB, ID, ReadPerm, WritePerm, Value]
-      ),
-
-   io:format
-   (
-      "~nataxia_client:add_at(~p) ! ~p -> ~p.~n",
-      [{DB, ID, ReadPerm, WritePerm, Value}, DBNode, Reply]
-   ),
-
-   Reply.
+   add_at(DB, ID, ReadPerm, WritePerm, ataxia_lock:unlocked(), Value).
 
 -spec add
    (
@@ -87,18 +139,7 @@ add_at (DB, ID, ReadPerm, WritePerm, Value) ->
    )
    -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
 add (DB, ReadPerm, WritePerm, Value) ->
-   DBNode = get_random_db_node(),
-
-   Reply =
-      rpc:call(DBNode, ataxia_server, add, [DB, ReadPerm, WritePerm, Value]),
-
-   io:format
-   (
-      "~nataxia_client:add(~p) ! ~p -> ok.~n",
-      [{DB, ReadPerm, WritePerm, Value}, DBNode]
-   ),
-
-   Reply.
+   add(DB, ReadPerm, WritePerm, ataxia_lock:unlocked(), Value).
 
 -spec reserve
    (
@@ -108,14 +149,77 @@ add (DB, ReadPerm, WritePerm, Value) ->
    )
    -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
 reserve (DB, ReadPerm, WritePerm) ->
-   DBNode = get_random_db_node(),
+   reserve (DB, ReadPerm, WritePerm, ataxia_lock:unlocked()).
 
-   Reply = rpc:call(DBNode, ataxia_server, reserve, [DB, ReadPerm, WritePerm]),
+-spec reserve_at
+   (
+      atom(),
+      ataxia_security:permission(),
+      ataxia_security:permission(),
+      ataxia_id:type()
+   )
+   -> ('ok' |  {'aborted', any()}).
+reserve_at (DB, ReadPerm, WritePerm, ID) ->
+   reserve_at (DB, ReadPerm, WritePerm, ataxia_lock:unlocked(), ID).
+
+%%%%
+%%%% Providing everything
+%%%%
+-spec add_at
+   (
+      atom(),
+      ataxia_id:type(),
+      ataxia_security:permission(),
+      ataxia_security:permission(),
+      ataxia_lock:type(),
+      any()
+   )
+   -> ({'aborted', any()} | 'ok').
+add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply =
+      rpc:call
+      (
+         DBNode,
+         ataxia_server,
+         add_at,
+         [DB, ID, ReadPerm, WritePerm, Lock, Value]
+      ),
 
    io:format
    (
-      "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
-      [{DB, ReadPerm, WritePerm}, DBNode, Reply]
+      "~nataxia_client:add_at(~p) ! ~p -> ~p.~n",
+      [{DB, ID, ReadPerm, WritePerm, Lock, Value}, DBNode, Reply]
+   ),
+
+   Reply.
+
+-spec add
+   (
+      atom(),
+      ataxia_security:permission(),
+      ataxia_security:permission(),
+      ataxia_lock:type(),
+      any()
+   )
+   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+add (DB, ReadPerm, WritePerm, Lock, Value) ->
+   DBNode = get_random_db_node(),
+
+   Reply =
+      rpc:call
+      (
+         DBNode,
+         ataxia_server,
+         add,
+         [DB, ReadPerm, WritePerm, Lock, Value]
+      ),
+
+   io:format
+   (
+      "~nataxia_client:add(~p) ! ~p -> ok.~n",
+      [{DB, ReadPerm, WritePerm, Lock, Value}, DBNode]
    ),
 
    Reply.
@@ -125,19 +229,54 @@ reserve (DB, ReadPerm, WritePerm) ->
       atom(),
       ataxia_security:permission(),
       ataxia_security:permission(),
-      ataxia_id:type()
+      ataxia_lock:type()
    )
-   -> ('ok' |  {'aborted', any()}).
-reserve (DB, ReadPerm, WritePerm, ID) ->
-   DBNode = get_db_node_for(ID),
+   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+reserve (DB, ReadPerm, WritePerm, Lock) ->
+   DBNode = get_random_db_node(),
 
    Reply =
-      rpc:call(DBNode, ataxia_server, reserve, [DB, ReadPerm, WritePerm, ID]),
+      rpc:call
+      (
+         DBNode,
+         ataxia_server,
+         reserve,
+         [DB, ReadPerm, WritePerm, Lock]
+      ),
 
    io:format
    (
       "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
-      [{DB, ReadPerm, WritePerm, ID}, DBNode, Reply]
+      [{DB, ReadPerm, WritePerm, Lock}, DBNode, Reply]
+   ),
+
+   Reply.
+
+-spec reserve_at
+   (
+      atom(),
+      ataxia_security:permission(),
+      ataxia_security:permission(),
+      ataxia_lock:type(),
+      ataxia_id:type()
+   )
+   -> ('ok' |  {'aborted', any()}).
+reserve_at (DB, ReadPerm, WritePerm, Lock, ID) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply =
+      rpc:call
+      (
+         DBNode,
+         ataxia_server,
+         reserve_at,
+         [DB, ReadPerm, WritePerm, Lock, ID]
+      ),
+
+   io:format
+   (
+      "~nataxia_client:reserve(~p) ! ~p -> ~p.~n",
+      [{DB, ReadPerm, WritePerm, Lock, ID}, DBNode, Reply]
    ),
 
    Reply.

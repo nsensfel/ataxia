@@ -10,10 +10,10 @@
 -export
 (
    [
-      add_at/5,
-      add/4,
-      reserve/3,
+      add_at/6,
+      add/5,
       reserve/4,
+      reserve_at/5,
 
       fetch/3,
       update/4,
@@ -200,11 +200,12 @@ fetch_if (DB, User, ID, Cond) ->
       ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
+      ataxia_lock:type(),
       any()
    )
    -> ({'aborted', any()} | 'ok').
-add_at (DB, ID, ReadPerm, WritePerm, Value) ->
-   Item = ataxia_entry:new(ID, ReadPerm, WritePerm, Value),
+add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
+   Item = ataxia_entry:new(ID, ReadPerm, WritePerm, Lock, Value),
    case mnesia:transaction(fun add_new_item/2, [DB, Item]) of
       {atomic, ok} -> ok;
       {aborted, Val} -> {aborted, Val}
@@ -215,25 +216,27 @@ add_at (DB, ID, ReadPerm, WritePerm, Value) ->
       atom(),
       ataxia_security:permission(),
       ataxia_security:permission(),
+      ataxia_lock:type(),
       any()
    )
    -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
-add (DB, ReadPerm, WritePerm, Value) ->
+add (DB, ReadPerm, WritePerm, Lock, Value) ->
    ID = ataxia_id_manager:allocate(DB),
-   case add_at(DB, ID, ReadPerm, WritePerm, Value) of
+   case add_at(DB, ID, ReadPerm, WritePerm, Lock, Value) of
       ok -> {ok, ID};
       {aborted, Val} -> {aborted, Val}
    end.
 
--spec reserve
+-spec reserve_at
    (
       atom(),
       ataxia_security:permission(),
       ataxia_security:permission(),
+      ataxia_lock:type(),
       ataxia_id:type()
    )
    -> ({'aborted', any()} | 'ok').
-reserve (DB, ReadPerm, WritePerm, ID) ->
+reserve_at (DB, ReadPerm, WritePerm, Lock, ID) ->
    % TODO: spawn or inform janitor
    add_at
    (
@@ -241,6 +244,7 @@ reserve (DB, ReadPerm, WritePerm, ID) ->
       ID,
       ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
       ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
+      Lock, % TODO: allow the janitor there.
       reserved
    ).
 
@@ -248,16 +252,18 @@ reserve (DB, ReadPerm, WritePerm, ID) ->
    (
       atom(),
       ataxia_security:permission(),
-      ataxia_security:permission()
+      ataxia_security:permission(),
+      ataxia_lock:type()
    )
    -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
-reserve (DB, ReadPerm, WritePerm) ->
+reserve (DB, ReadPerm, WritePerm, Lock) ->
    % TODO: spawn or inform janitor
    add
    (
       DB,
       ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
       ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
+      Lock, % TODO: allow the janitor there.
       reserved
    ).
 
