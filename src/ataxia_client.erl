@@ -76,7 +76,7 @@ get_db_node_for (_ObjectID) ->
    )
    -> ({'aborted', any()} | 'ok').
 add_at (DB, ID, User, Value) ->
-   Permission = ataxia_permission:allow_only(User),
+   Permission = ataxia_security:allow_only(User),
 
    add_at(DB, ID, Permission, Permission, ataxia_lock:unlocked(), Value).
 
@@ -88,7 +88,7 @@ add_at (DB, ID, User, Value) ->
    )
    -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
 add (DB, User, Value) ->
-   Permission = ataxia_permission:allow_only(User),
+   Permission = ataxia_security:allow_only(User),
 
    add(DB, Permission, Permission, ataxia_lock:unlocked(), Value).
 
@@ -99,7 +99,7 @@ add (DB, User, Value) ->
    )
    -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
 reserve (DB, User) ->
-   Permission = ataxia_permission:allow_only(User),
+   Permission = ataxia_security:allow_only(User),
 
    reserve (DB, Permission, Permission, ataxia_lock:unlocked()).
 
@@ -111,7 +111,7 @@ reserve (DB, User) ->
    )
    -> ('ok' |  {'aborted', any()}).
 reserve_at (DB, User, ID) ->
-   Permission = ataxia_permission:allow_only(User),
+   Permission = ataxia_security:allow_only(User),
 
    reserve_at (DB, Permission, Permission, ataxia_lock:unlocked(), ID).
 
