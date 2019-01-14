@@ -20,6 +20,11 @@
       update_and_fetch/4,
       remove/3,
 
+      fetch_if/4,
+      update_if/5,
+      update_and_fetch_if/5,
+      remove_if/4,
+
       fetch_any/3,
       update_any/4,
       update_and_fetch_any/4,

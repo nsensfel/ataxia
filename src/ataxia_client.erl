@@ -33,6 +33,11 @@
       update_and_fetch/4,
       remove/3,
 
+      fetch_if/4,
+      update_if/5,
+      update_and_fetch_if/5,
+      remove_if/4,
+
       fetch_any/3,
       update_any/4,
       update_and_fetch_any/4,
@@ -74,7 +79,7 @@ get_db_node_for (_ObjectID) ->
       ataxia_security:user(),
       any()
    )
-   -> ({'aborted', any()} | 'ok').
+   -> ('ok' | ataxia_error:type()).
 add_at (DB, ID, User, Value) ->
    Permission = ataxia_security:allow_only(User),
 
@@ -86,7 +91,7 @@ add_at (DB, ID, User, Value) ->
       ataxia_security:user(),
       any()
    )
-   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 add (DB, User, Value) ->
    Permission = ataxia_security:allow_only(User),
 
@@ -97,7 +102,7 @@ add (DB, User, Value) ->
       atom(),
       ataxia_security:user()
    )
-   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 reserve (DB, User) ->
    Permission = ataxia_security:allow_only(User),
 
@@ -109,7 +114,7 @@ reserve (DB, User) ->
       ataxia_security:user(),
       ataxia_id:type()
    )
-   -> ('ok' |  {'aborted', any()}).
+   -> ('ok' | ataxia_error:type()).
 reserve_at (DB, User, ID) ->
    Permission = ataxia_security:allow_only(User),
 
@@ -126,7 +131,7 @@ reserve_at (DB, User, ID) ->
       ataxia_security:permission(),
       any()
    )
-   -> ({'aborted', any()} | 'ok').
+   -> ('ok' | ataxia_error:type()).
 add_at (DB, ID, ReadPerm, WritePerm, Value) ->
    add_at(DB, ID, ReadPerm, WritePerm, ataxia_lock:unlocked(), Value).
 
@@ -137,7 +142,7 @@ add_at (DB, ID, ReadPerm, WritePerm, Value) ->
       ataxia_security:permission(),
       any()
    )
-   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 add (DB, ReadPerm, WritePerm, Value) ->
    add(DB, ReadPerm, WritePerm, ataxia_lock:unlocked(), Value).
 
@@ -147,7 +152,7 @@ add (DB, ReadPerm, WritePerm, Value) ->
       ataxia_security:permission(),
       ataxia_security:permission()
    )
-   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 reserve (DB, ReadPerm, WritePerm) ->
    reserve (DB, ReadPerm, WritePerm, ataxia_lock:unlocked()).
 
@@ -158,7 +163,7 @@ reserve (DB, ReadPerm, WritePerm) ->
       ataxia_security:permission(),
       ataxia_id:type()
    )
-   -> ('ok' |  {'aborted', any()}).
+   -> ('ok' | ataxia_error:type()).
 reserve_at (DB, ReadPerm, WritePerm, ID) ->
    reserve_at (DB, ReadPerm, WritePerm, ataxia_lock:unlocked(), ID).
 
@@ -174,7 +179,7 @@ reserve_at (DB, ReadPerm, WritePerm, ID) ->
       ataxia_lock:type(),
       any()
    )
-   -> ({'aborted', any()} | 'ok').
+   -> ('ok' | ataxia_error:type()).
 add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
    DBNode = get_db_node_for(ID),
 
@@ -203,7 +208,7 @@ add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
       ataxia_lock:type(),
       any()
    )
-   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 add (DB, ReadPerm, WritePerm, Lock, Value) ->
    DBNode = get_random_db_node(),
 
@@ -231,7 +236,7 @@ add (DB, ReadPerm, WritePerm, Lock, Value) ->
       ataxia_security:permission(),
       ataxia_lock:type()
    )
-   -> ({'ok', ataxia_id:type()} | {'aborted', any()}).
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 reserve (DB, ReadPerm, WritePerm, Lock) ->
    DBNode = get_random_db_node(),
 
@@ -260,7 +265,7 @@ reserve (DB, ReadPerm, WritePerm, Lock) ->
       ataxia_lock:type(),
       ataxia_id:type()
    )
-   -> ('ok' |  {'aborted', any()}).
+   -> ('ok' | ataxia_error:type()).
 reserve_at (DB, ReadPerm, WritePerm, Lock, ID) ->
    DBNode = get_db_node_for(ID),
 
@@ -289,7 +294,7 @@ reserve_at (DB, ReadPerm, WritePerm, Lock, ID) ->
       ataxia_security:user(),
       ataxia_id:type()
    )
-   -> ({'ok', any()} | 'not_found').
+   -> ({'ok', any()} | ataxia_error:type()).
 fetch (DB, User, ID) ->
    DBNode = get_db_node_for(ID),
 
@@ -310,7 +315,7 @@ fetch (DB, User, ID) ->
       ataxic:meta(),
       ataxia_id:type()
    )
-   -> ('ok' | 'not_found').
+   -> ('ok' | ataxia_error:type()).
 update (DB, User, Op, ID) ->
    DBNode = get_db_node_for(ID),
 
@@ -331,7 +336,7 @@ update (DB, User, Op, ID) ->
       ataxic:meta(),
       ataxia_id:type()
    )
-   -> ({'ok', any()} | 'not_found').
+   -> ({'ok', any()} | ataxia_error:type()).
 update_and_fetch (DB, User, Op, ID) ->
    DBNode = get_db_node_for(ID),
 
@@ -353,7 +358,7 @@ update_and_fetch (DB, User, Op, ID) ->
       ataxia_security:user(),
       ataxia_id:type()
    )
-   -> ('ok' | 'not_found').
+   -> ('ok' | ataxia_error:type()).
 remove (DB, User, ID) ->
    DBNode = get_db_node_for(ID),
 
@@ -367,6 +372,101 @@ remove (DB, User, ID) ->
 
    Reply.
 
+%%%% BY ID AND CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec fetch_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ({'ok', any()} | ataxia_error:type()).
+fetch_if (DB, User, ID, Cond) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply = rpc:call(DBNode, ataxia_server, fetch_if, [DB, User, ID, Cond]),
+
+   io:format
+   (
+      "~nataxia_client:fetch_if(~p) ! ~p -> ~p.~n",
+      [{DB, User, ID, Cond}, DBNode, Reply]
+   ),
+
+   Reply.
+
+-spec update_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxic:meta(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ('ok' | ataxia_error:type()).
+update_if (DB, User, Op, ID, Cond) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply = rpc:call(DBNode, ataxia_server, update_if, [DB, User, Op, ID, Cond]),
+
+   io:format
+   (
+      "~nataxia_client:update_if(~p) ! ~p -> ~p.~n",
+      [{DB, User, Op, ID, Cond}, DBNode, Reply]
+   ),
+
+   Reply.
+
+-spec update_and_fetch_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxic:meta(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ({'ok', any()} | ataxia_error:type()).
+update_and_fetch_if (DB, User, Op, ID, Cond) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply =
+      rpc:call
+      (
+         DBNode,
+         ataxia_server,
+         update_and_fetch_if,
+         [DB, User, Op, ID, Cond]
+      ),
+
+   io:format
+   (
+      "~nataxia_client:update_and_fetch_if(~p) ! ~p -> ~p.~n",
+      [{DB, User, Op, ID, Cond}, DBNode, Reply]
+   ),
+
+   Reply.
+
+
+-spec remove_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ('ok' | ataxia_error:type()).
+remove_if (DB, User, ID, Cond) ->
+   DBNode = get_db_node_for(ID),
+
+   Reply = rpc:call(DBNode, ataxia_server, remove_if, [DB, User, ID, Cond]),
+
+   io:format
+   (
+      "~nataxia_client:remove_if(~p) ! ~p -> ~p.~n",
+      [{DB, User, ID, Cond}, DBNode, Reply]
+   ),
+
+   Reply.
+
 %%%% ONE, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec fetch_any
    (
@@ -374,7 +474,7 @@ remove (DB, User, ID) ->
       ataxia_security:user(),
       ataxic:basic()
    )
-   -> ({'ok', ataxia_id:type(), any()} | 'not_found').
+   -> ({'ok', ataxia_id:type(), any()} | ataxia_error:type()).
 fetch_any (DB, User, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
@@ -396,7 +496,7 @@ fetch_any (DB, User, Condition) ->
       ataxic:meta(),
       ataxic:basic()
    )
-   -> ({'ok', ataxia_id:type()} | 'not_found').
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 update_any (DB, User, Op, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
@@ -419,7 +519,7 @@ update_any (DB, User, Op, Condition) ->
       ataxic:meta(),
       ataxic:basic()
    )
-   -> ({'ok', any(), ataxia_id:type()} | 'not_found').
+   -> ({'ok', any(), ataxia_id:type()} | ataxia_error:type()).
 update_and_fetch_any (DB, User, Op, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
@@ -448,7 +548,7 @@ update_and_fetch_any (DB, User, Op, Condition) ->
       ataxia_security:user(),
       ataxic:basic()
    )
-   -> ({'ok', ataxia_id:type()} | 'not_found').
+   -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
 remove_any (DB, User, Condition) ->
    % TODO: Try all nodes one by one until one is found.
    DBNode = get_db_node_for(<<"">>),
