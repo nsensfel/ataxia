@@ -69,7 +69,7 @@ update_internals (DB, User, OP, ID) ->
 
    {ok, UpdatedEntry}.
 
--spec update_if
+-spec update_if_internals
    (
       atom(),
       ataxia_security:user(),
@@ -78,7 +78,7 @@ update_internals (DB, User, OP, ID) ->
       ataxic:basic()
    )
    -> ({'ok', ataxia_entry:type()} | no_match).
-update_if (DB, User, OP, ID, Cond) ->
+update_if_internals (DB, User, OP, ID, Cond) ->
    [Entry] = mnesia:read(DB, ID),
 
    true =
@@ -127,7 +127,7 @@ remove_internals (DB, User, ID) ->
 
    ok.
 
--spec remove_if
+-spec remove_if_internals
    (
       atom(),
       ataxia_security:user(),
@@ -135,7 +135,7 @@ remove_internals (DB, User, ID) ->
       ataxic:basic()
    )
    -> ('ok' | 'no_match').
-remove_if (DB, User, ID, Cond) ->
+remove_if_internals (DB, User, ID, Cond) ->
    [Entry] = mnesia:read(DB, ID),
 
    true =
@@ -167,7 +167,7 @@ add_new_item (DB, Item) ->
 
    ok.
 
--spec fetch_if
+-spec fetch_if_internals
    (
       atom(),
       ataxia_security:user(),
@@ -175,7 +175,7 @@ add_new_item (DB, Item) ->
       ataxic:basic()
    )
    -> ({'aborted', any()} | {'ok', any()}).
-fetch_if (DB, User, ID, Cond) ->
+fetch_if_internals (DB, User, ID, Cond) ->
    case mnesia:read(DB, ID) of
       [Entry] ->
          IsAllowed =
@@ -301,6 +301,20 @@ fetch (DB, User, ID) ->
       Other -> {aborted, Other}
    end.
 
+-spec fetch_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ({'aborted', any()} | {'ok', any()}).
+fetch_if (DB, User, ID, Cond) ->
+   case mnesia:transaction(fun fetch_if_internals/4, [DB, User, ID, Cond]) of
+      {atomic, {ok, Value}} -> {ok, Value};
+      Other -> Other
+   end.
+
 -spec fetch_any
    (
       atom(),
@@ -320,7 +334,7 @@ fetch_any (DB, User, Cond) ->
                   case
                      mnesia:transaction
                      (
-                        fun fetch_if/4,
+                        fun fetch_if_internals/4,
                         [DB, User, Key, Cond]
                      )
                   of
@@ -351,7 +365,7 @@ fetch_all (DB, User, Cond) ->
             case
                mnesia:transaction
                (
-                  fun fetch_if/4,
+                  fun fetch_if_internals/4,
                   [DB, User, Key, Cond]
                )
             of
@@ -384,6 +398,28 @@ update (DB, User, Update, ID) ->
       Other -> {aborted, Other}
    end.
 
+-spec update_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxic:meta(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ({'aborted', any()} | 'ok').
+update_if (DB, User, Update, ID, Cond) ->
+   case
+      mnesia:transaction
+      (
+         fun update_if_internals/5,
+         [DB, User, Update, ID, Cond]
+      )
+   of
+      {atomic, {ok, _}} -> ok;
+      Other -> Other
+   end.
+
+
 -spec update_any
    (
       atom(),
@@ -404,7 +440,7 @@ update_any (DB, User, Update, Cond) ->
                   case
                      mnesia:transaction
                      (
-                        fun update_if/5,
+                        fun update_if_internals/5,
                         [DB, User, Update, Key, Cond]
                      )
                   of
@@ -436,7 +472,7 @@ update_all (DB, User, Update, Cond) ->
             case
                mnesia:transaction
                (
-                  fun update_if/5,
+                  fun update_if_internals/5,
                   [DB, User, Update, Key, Cond]
                )
             of
@@ -469,6 +505,29 @@ update_and_fetch (DB, User, Update, ID) ->
       Other -> {aborted, Other}
    end.
 
+-spec update_and_fetch_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxic:meta(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ({'aborted', any()} | {'ok', any()}).
+update_and_fetch_if (DB, User, Update, ID, Cond) ->
+   case
+      mnesia:transaction
+      (
+         fun update_if_internals/5,
+         [DB, User, Update, ID, Cond]
+      )
+   of
+      {atomic, {ok, Entry}} ->
+         {ok, ataxia_entry:get_value(Entry)};
+
+      Other -> Other
+   end.
+
 -spec update_and_fetch_any
    (
       atom(),
@@ -489,7 +548,7 @@ update_and_fetch_any (DB, User, Update, Cond) ->
                   case
                      mnesia:transaction
                      (
-                        fun update_if/5,
+                        fun update_if_internals/5,
                         [DB, User, Update, Key, Cond]
                      )
                   of
@@ -523,7 +582,7 @@ update_and_fetch_all (DB, User, Update, Cond) ->
             case
                mnesia:transaction
                (
-                  fun update_if/5,
+                  fun update_if_internals/5,
                   [DB, User, Update, Key, Cond]
                )
             of
@@ -551,6 +610,26 @@ remove (DB, User, ID) ->
       Other -> {aborted, Other}
    end.
 
+-spec remove_if
+   (
+      atom(),
+      ataxia_security:user(),
+      ataxia_id:type(),
+      ataxic:basic()
+   )
+   -> ({'aborted', any()} | 'ok').
+remove_if (DB, User, ID, Cond) ->
+   case
+      mnesia:transaction
+      (
+         fun remove_if_internals/4,
+         [DB, User, ID, Cond]
+      )
+   of
+      {atomic, ok} -> ok;
+      Other -> Other
+   end.
+
 -spec remove_any
    (
       atom(),
@@ -570,7 +649,7 @@ remove_any (DB, User, Cond) ->
                   case
                      mnesia:transaction
                      (
-                        fun remove_if/4,
+                        fun remove_if_internals/4,
                         [DB, User, Key, Cond]
                      )
                   of
@@ -601,7 +680,7 @@ remove_all (DB, User, Cond) ->
             case
                mnesia:transaction
                (
-                  fun remove_if/4,
+                  fun remove_if_internals/4,
                   [DB, User, Key, Cond]
                )
             of
