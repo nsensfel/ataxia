@@ -20,6 +20,7 @@
       add_access/2,
       remove_access/2,
       allow_only/1,
+      allow/1,
       allow_any/0,
       allow_none/0
    ]
@@ -44,6 +45,9 @@ remove_access (User, Permission) ->
 -spec allow_only (user()) -> permission().
 allow_only (User) ->
    ordsets:add_element(User, ordsets:new()).
+
+-spec allow (list(user())) -> permission().
+allow (Users) -> ordsets:from_list(Users).
 
 -spec allow_any () -> permission().
 allow_any () ->

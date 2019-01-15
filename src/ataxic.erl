@@ -38,6 +38,8 @@
 -record(lor, {params :: list(basic())}).
 -record(neg, {param :: basic()}).
 
+-record(list_cons, {param :: basic()}).
+
 % TODO: list all of the above.
 -type basic() :: any().
 
@@ -72,7 +74,8 @@
       eq/2,
       land/1,
       lor/1,
-      neg/1
+      neg/1,
+      list_cons/1
    ]
 ).
 
@@ -126,12 +129,13 @@ basic_apply_to (#eq{ p0 = P0, p1 = P1 }, Val) ->
 
 basic_apply_to (#land{ params = List }, Val) ->
    lists:all(fun (E) -> basic_apply_to(E, Val) end, List);
-
 basic_apply_to (#lor{ params = List }, Val) ->
    lists:any(fun (E) -> basic_apply_to(E, Val) end, List);
-
 basic_apply_to (#neg{ param = V }, Val) ->
-   not basic_apply_to(V, Val).
+   not basic_apply_to(V, Val);
+
+basic_apply_to (#list_cons{ param = V }, Val) ->
+   [V|Val].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -179,6 +183,9 @@ lor (List) -> #lor{ params = List }.
 -spec neg (basic()) -> basic().
 neg (V) -> #neg{ param = V }.
 
+
+-spec list_cons (basic()) -> basic().
+list_cons (V) -> #list_cons{ param = V}.
 
 
 -spec sequence_meta (list(meta())) -> meta().
