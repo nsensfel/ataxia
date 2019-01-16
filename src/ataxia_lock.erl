@@ -37,7 +37,7 @@ locked (User, Time) ->
    {
       status = locked,
       permission = ataxia_security:allow_only(User),
-      time = ataxia_time:add(ataxia_time:now(), Time)
+      time = Time
    }.
 
 -spec unlocked () -> type().
