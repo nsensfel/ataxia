@@ -75,15 +75,15 @@ get_db_node_for (_ObjectID) ->
 -spec add_at
    (
       atom(),
-      ataxia_id:type(),
       ataxia_security:user(),
-      any()
+      any(),
+      ataxia_id:type()
    )
    -> ('ok' | ataxia_error:type()).
-add_at (DB, ID, User, Value) ->
+add_at (DB, User, Value, ID) ->
    Permission = ataxia_security:allow_only(User),
 
-   add_at(DB, ID, Permission, Permission, ataxia_lock:unlocked(), Value).
+   add_at(DB, Permission, Permission, ataxia_lock:unlocked(), Value, ID).
 
 -spec add
    (
@@ -126,14 +126,14 @@ reserve_at (DB, User, ID) ->
 -spec add_at
    (
       atom(),
-      ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
-      any()
+      any(),
+      ataxia_id:type()
    )
    -> ('ok' | ataxia_error:type()).
-add_at (DB, ID, ReadPerm, WritePerm, Value) ->
-   add_at(DB, ID, ReadPerm, WritePerm, ataxia_lock:unlocked(), Value).
+add_at (DB, ReadPerm, WritePerm, Value, ID) ->
+   add_at(DB, ReadPerm, WritePerm, ataxia_lock:unlocked(), Value, ID).
 
 -spec add
    (
@@ -173,14 +173,14 @@ reserve_at (DB, ReadPerm, WritePerm, ID) ->
 -spec add_at
    (
       atom(),
-      ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
       ataxia_lock:type(),
-      any()
+      any(),
+      ataxia_id:type()
    )
    -> ('ok' | ataxia_error:type()).
-add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
+add_at (DB, ReadPerm, WritePerm, Lock, Value, ID) ->
    DBNode = get_db_node_for(ID),
 
    Reply =
@@ -189,7 +189,7 @@ add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
          DBNode,
          ataxia_server,
          add_at,
-         [DB, ID, ReadPerm, WritePerm, Lock, Value]
+         [DB, ReadPerm, WritePerm, Lock, Value, ID]
       ),
 
    io:format

@@ -202,14 +202,14 @@ fetch_if_internals (DB, User, ID, Cond) ->
 -spec add_at
    (
       atom(),
-      ataxia_id:type(),
       ataxia_security:permission(),
       ataxia_security:permission(),
       ataxia_lock:type(),
-      any()
+      any(),
+      ataxia_id:type()
    )
    -> ({'aborted', any()} | 'ok').
-add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
+add_at (DB, ReadPerm, WritePerm, Lock, Value, ID) ->
    Item = ataxia_entry:new(ID, ReadPerm, WritePerm, Lock, Value),
    case mnesia:transaction(fun add_new_item/2, [DB, Item]) of
       {atomic, ok} -> ok;
@@ -227,7 +227,7 @@ add_at (DB, ID, ReadPerm, WritePerm, Lock, Value) ->
    -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
 add (DB, ReadPerm, WritePerm, Lock, Value) ->
    ID = ataxia_id_manager:allocate(DB),
-   case add_at(DB, ID, ReadPerm, WritePerm, Lock, Value) of
+   case add_at(DB, ReadPerm, WritePerm, Lock, Value, ID) of
       ok -> {ok, ID};
       {aborted, Val} -> {aborted, Val}
    end.
@@ -246,11 +246,11 @@ reserve_at (DB, ReadPerm, WritePerm, Lock, ID) ->
    add_at
    (
       DB,
-      ID,
       ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
       ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
       Lock, % TODO: allow the janitor there.
-      reserved
+      reserved,
+      ID
    ).
 
 -spec reserve
