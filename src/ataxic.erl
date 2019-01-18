@@ -40,8 +40,32 @@
 
 -record(list_cons, {param :: basic()}).
 
-% TODO: list all of the above.
--type basic() :: any().
+-type basic() ::
+   #field{}
+   | #upfield{}
+
+%%%% Sequence of instructions
+   | #seq{}
+
+%%%% List
+   | #const{}
+   | #current{}
+
+   | #apply_fun{}
+
+%%%% Number Comparison
+   | #gt{}
+   | #ge{}
+   | #lt{}
+   | #le{}
+   | #eq{}
+
+%%%% Bool Operations
+   | #land{}
+   | #lor{}
+   | #neg{}
+
+   | #list_cons{}.
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Select
