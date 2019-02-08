@@ -159,7 +159,7 @@ basic_apply_to (#neg{ param = V }, Val) ->
    not basic_apply_to(V, Val);
 
 basic_apply_to (#list_cons{ param = V }, Val) ->
-   [V|Val].
+   [basic_apply_to(V, Val)|Val].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
