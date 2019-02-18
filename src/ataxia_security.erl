@@ -26,6 +26,15 @@
    ]
 ).
 -export([can_access/2]).
+-export
+(
+   [
+      user_to_json/2,
+      permission_to_json/2,
+      user_from_json/2,
+      permission_from_json/2
+   ]
+).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -79,3 +88,36 @@ can_access (User, Permission) ->
             or ordsets:is_element(User, Permission)
          )
    end.
+
+-spec user_to_json (fun((user()) -> binary()), user()) -> any().
+user_to_json (_UserEncoder, admin) -> <<"admin">>;
+user_to_json (_UserEncoder, janitor) -> <<"janitor">>;
+user_to_json (_UserEncoder, any) -> <<"any">>;
+user_to_json (UserEncoder, {user, User}) ->
+   Prefix = <<"u_">>,
+   EncodedUser = UserEncoder(User),
+   <<Prefix/binary, EncodedUser/binary>>.
+
+-spec permission_to_json (fun((user()) -> binary()), permission()) -> any().
+permission_to_json (UserEncoder, Permission) ->
+   lists:map(fun (User) -> user_to_json(UserEncoder, User) end, Permission).
+
+-spec user_from_json (fun((binary()) -> user()), binary()) -> user().
+user_from_json (_UserDecoder, <<"admin">>) -> admin;
+user_from_json (_UserDecoder, <<"janitor">>) -> janitor;
+user_from_json (_UserDecoder, <<"any">>) -> any;
+user_from_json (UserDecoder, EncodedUser) ->
+   PrefixSize = byte_size(<<"u_">>),
+   EncodedUserSize = byte_size(EncodedUser),
+   NoPrefixEncodedUser =
+      binary:part(EncodedUser, {PrefixSize, (EncodedUserSize - PrefixSize)}),
+   {user, UserDecoder(NoPrefixEncodedUser)}.
+
+-spec permission_from_json
+   (
+      fun((user()) -> binary()),
+      permission()
+   )
+   -> permission().
+permission_from_json (UserEncoder, Permission) ->
+   lists:map(fun (User) -> UserEncoder(User) end, Permission).
