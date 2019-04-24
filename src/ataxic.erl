@@ -12,9 +12,19 @@
 %%%% Sequence of instructions
 -record(seq, {ops :: list(basic())}).
 
-%%%% List
+%%%% Values Access
 -record(const, {value :: any()}).
 -record(current, {}).
+
+% Possible improvement: add support for some sort of registers.
+% This would add a dict (no need for orddict here) when evaluating Ataxic
+% expressions, with the following functions:
+% -record(reg_store, {name :: binary(), op :: basic()}).
+% -record(reg_load, {name :: binary()}).
+% It's kind of weird to use though, cause you can't retrieve what you've stored
+% at a node that was deeper in the query's tree. It can be used to move values
+% further down (or horizontally) though, and there are already instructions that
+% give you values found further down.
 
 -record
 (
