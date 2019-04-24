@@ -163,6 +163,80 @@ basic_apply_to (#neg{ param = V }, Val) ->
 basic_apply_to (#list_cons{ param = V }, Val) ->
    [basic_apply_to(V, Val)|Val].
 
+-spec optimize_update_field_sequence (list(basic()), list(basic())) -> basic().
+optimize_update_field_sequence ([], Result) ->
+   case Result of
+      [A] -> A;
+      _ -> sequence(Result)
+   end;
+optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
+   {FieldUpdates, PotentiallyImportantOPs} =
+      lists:splitwith(fun (E) -> is_record(E, upfield) end, UnsortedOPs),
+
+   SortedFieldUpdates = lists:sort(fun (E) -> E#upfield.ix end, FieldUpdates),
+   {LastIX, LastUpdateOPs, OtherMergedFieldUpdates} =
+      lists:foldl
+      (
+         fun (Update, {CurrentIX, CurrentOPs, CurrentResult}) ->
+            case (Update#upfield.ix == CurrentIX) of
+               true ->
+                  {CurrentIX, [Update#upfield.op|CurrentOPs], CurrentResult};
+
+               _ ->
+                  {
+                     Update#upfield.ix,
+                     [Update#upfield.op],
+                     (
+                        case CurrentOPs of
+                           [] -> CurrentResult;
+                           [OP] ->
+                              [
+                                 update_field(CurrentIX, OP)
+                                 |CurrentResult
+                              ];
+                           _ ->
+                              [
+                                 update_field(CurrentIX, sequence(CurrentOPs))
+                                 |CurrentResult
+                              ]
+                        end
+                     )
+                  }
+            end
+         end,
+         {-1, [], []},
+         SortedFieldUpdates
+      ),
+
+   MergedFieldUpdates =
+      (
+         case LastUpdateOPs of
+            [] -> OtherMergedFieldUpdates;
+            [OP] ->
+               [
+                  update_field(LastIX, OP)
+                  |OtherMergedFieldUpdates
+               ];
+            _ ->
+               [
+                  update_field(LastIX, sequence(LastUpdateOPs))
+                  |OtherMergedFieldUpdates
+               ]
+         end
+      ),
+   {ImportantOPs, PotentialFieldUpdates} =
+      lists:splitwith
+      (
+         fun (E) -> not is_record(E, upfield) end,
+         PotentiallyImportantOPs
+      ),
+
+   optimize_update_field_sequence
+   (
+      PotentialFieldUpdates,
+      (CurrentResults ++ MergedFieldUpdates ++ ImportantOPs)
+   ).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -229,9 +303,8 @@ update_write_permission (OP) -> #write_perm{ op = OP }.
 update_value (OP) -> #value{ op = OP }.
 
 -spec optimize (basic()) -> basic().
+optimize (#seq{ ops = OPs }) -> optimize_update_field_sequence(OPs, []);
 optimize (OP) -> OP.
-% TODO:
-% - Merge relevant upfield in sequences.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
