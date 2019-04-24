@@ -116,6 +116,8 @@
 
 -export([apply_to/2, matches/2]).
 
+-export([optimize/1]).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -211,7 +213,6 @@ neg (V) -> #neg{ param = V }.
 -spec list_cons (basic()) -> basic().
 list_cons (V) -> #list_cons{ param = V}.
 
-
 -spec sequence_meta (list(meta())) -> meta().
 sequence_meta (List) -> #mseq{ ops = List }.
 
@@ -226,6 +227,11 @@ update_write_permission (OP) -> #write_perm{ op = OP }.
 
 -spec update_value (basic()) -> meta().
 update_value (OP) -> #value{ op = OP }.
+
+-spec optimize (basic()) -> basic().
+optimize (OP) -> OP.
+% TODO:
+% - Merge relevant upfield in sequences.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
