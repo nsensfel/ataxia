@@ -183,7 +183,15 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
    {FieldUpdates, PotentiallyImportantOPs} =
       lists:splitwith(fun (E) -> is_record(E, upfield) end, UnsortedOPs),
 
-   SortedFieldUpdates = lists:sort(fun (E) -> E#upfield.ix end, FieldUpdates),
+   SortedFieldUpdates =
+      lists:sort
+      (
+         fun (A, B) ->
+            ((A#upfield.ix) =< (B#upfield.ix))
+         end,
+         FieldUpdates
+      ),
+
    {LastIX, LastUpdateOPs, OtherMergedFieldUpdates} =
       lists:foldl
       (
@@ -247,7 +255,7 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
       (CurrentResults ++ MergedFieldUpdates ++ ImportantOPs)
    ).
 
--spec flatten_sequence (list(basic())) -> basic().
+-spec flatten_sequence (list(basic())) -> list(basic()).
 flatten_sequence (OPs) ->
    lists:foldl
    (

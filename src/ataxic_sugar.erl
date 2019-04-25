@@ -86,10 +86,14 @@ update_orddict_element (IX, OP) ->
 -spec nop () -> ataxic:basic().
 nop () -> ataxic:sequence([]).
 
--spec update_ordset (ordsets:ordset(), ordsets:ordeset()) -> ataxic:basic().
+-spec update_ordset
+   (
+      ordsets:ordset(any()),
+      ordsets:ordset(any())
+   ) -> ataxic:basic().
 update_ordset (Old, New) ->
-   Remove = ordsets:substract(Old, New),
-   Add = ordsets:substract(New, Old),
+   Remove = ordsets:subtract(Old, New),
+   Add = ordsets:subtract(New, Old),
 
    ataxic:sequence
    (
