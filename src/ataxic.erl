@@ -247,6 +247,20 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
       (CurrentResults ++ MergedFieldUpdates ++ ImportantOPs)
    ).
 
+-spec flatten_sequence (list(basic())) -> basic().
+flatten_sequence (OPs) ->
+   lists:foldl
+   (
+      fun (E, CurrentOPs) ->
+         case is_record(E, seq) of
+            true -> (E#seq.ops ++ CurrentOPs);
+            _ -> [E|CurrentOPs]
+         end
+      end,
+      [],
+      OPs
+   ).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -313,7 +327,9 @@ update_write_permission (OP) -> #write_perm{ op = OP }.
 update_value (OP) -> #value{ op = OP }.
 
 -spec optimize (basic()) -> basic().
-optimize (#seq{ ops = OPs }) -> optimize_update_field_sequence(OPs, []);
+optimize (#seq{ ops = OPs }) ->
+   S0OPs = flatten_sequence(OPs),
+   optimize_update_field_sequence(S0OPs, []);
 optimize (OP) -> OP.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
