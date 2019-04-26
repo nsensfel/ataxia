@@ -337,7 +337,8 @@ update_value (OP) -> #value{ op = OP }.
 -spec optimize (basic()) -> basic().
 optimize (#seq{ ops = OPs }) ->
    S0OPs = flatten_sequence(OPs),
-   optimize_update_field_sequence(S0OPs, []);
+   S1OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S0OPs),
+   optimize_update_field_sequence(S1OPs, []);
 optimize (OP) -> OP.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
