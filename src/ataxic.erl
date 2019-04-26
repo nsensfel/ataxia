@@ -126,7 +126,7 @@
 
 -export([apply_to/2, matches/2]).
 
--export([optimize/1]).
+-export([optimize/1, is_constant/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -378,3 +378,7 @@ matches (OP, Entry) ->
       true -> true;
       _ -> false
    end.
+
+-spec is_constant (basic()) -> boolean().
+is_constant (#const{}) -> true;
+is_constant(_) -> false.

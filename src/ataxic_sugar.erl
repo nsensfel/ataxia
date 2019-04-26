@@ -64,20 +64,26 @@ update_orddict_element (IX, OP) ->
       store,
       [
          ataxic:constant(IX),
-         ataxic:sequence
          (
-            [
-               ataxic:apply_function
-               (
-                  orddict,
-                  fetch,
-                  [
-                     ataxic:constant(IX),
-                     ataxic:current_value()
-                  ]
-               ),
-               OP
-            ]
+            case ataxic:is_constant(OP) of
+               true -> OP;
+               false ->
+                  ataxic:sequence
+                  (
+                     [
+                        ataxic:apply_function
+                        (
+                           orddict,
+                           fetch,
+                           [
+                              ataxic:constant(IX),
+                              ataxic:current_value()
+                           ]
+                        ),
+                        OP
+                     ]
+                  )
+            end
          ),
          ataxic:current_value()
       ]
