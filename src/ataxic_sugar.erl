@@ -53,7 +53,7 @@ update_array_cell (IX, OP) ->
 
 -spec update_orddict_element
    (
-      non_neg_integer(),
+      any(),
       ataxic:basic()
    )
    -> ataxic:basic().

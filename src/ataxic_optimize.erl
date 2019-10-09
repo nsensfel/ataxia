@@ -13,6 +13,30 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% list(..., const(a), ...) -> list(const(a), ...)
+-spec remove_overridden_operations
+   (
+      list(ataxic:basic())
+   )
+   -> list(ataxic:basic()).
+remove_overridden_operations (List) ->
+   lists:foldr
+   (
+      fun (Elem, CurrentResult) ->
+         case CurrentResult of
+            {done, _} -> CurrentResult;
+            {ok, List} ->
+               case Elem of
+                  #const{} -> {done, [Elem|List]};
+                  _ -> {ok, [Elem|List]}
+               end
+         end
+      end,
+      {ok, []},
+      List
+   ).
+
+% list(update_field(a, o0), update(a, o1), ...) -> update_field(a, list(o0, o1))
 -spec optimize_update_field_sequence
    (
       list(ataxic:basic()),
@@ -21,13 +45,16 @@
    -> ataxic:basic().
 optimize_update_field_sequence ([], Result) ->
    case Result of
+      [] -> ataxic:current_value();
       [A] -> A;
       _ -> ataxic:sequence(Result)
    end;
 optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
+   % Get all field updates until you encounter something else
    {FieldUpdates, PotentiallyImportantOPs} =
       lists:splitwith(fun (E) -> is_record(E, upfield) end, UnsortedOPs),
 
+   % Sort field updates by updated field
    SortedFieldUpdates =
       lists:sort
       (
@@ -37,6 +64,9 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
          FieldUpdates
       ),
 
+   % Merge all field updates that are for the same field
+   % LastIX, LastUpdateOPs correspond to the last field updates that should be
+   % merged but that were surprised by the sequence ending.
    {LastIX, LastUpdateOPs, OtherMergedFieldUpdates} =
       lists:foldl
       (
@@ -75,6 +105,7 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
          SortedFieldUpdates
       ),
 
+   % Add the merged LastUpdateOPs for field LastIX
    MergedFieldUpdates =
       (
          case LastUpdateOPs of
@@ -91,6 +122,8 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
                ]
          end
       ),
+
+   % Skip the OPs until we find another field update
    {ImportantOPs, PotentialFieldUpdates} =
       lists:splitwith
       (
@@ -139,8 +172,8 @@ aggressive (#seq{ ops = S0OPs }) ->
    S3OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S2OPs),
    Result = optimize_update_field_sequence(S3OPs, []),
 
-   case Result#seq.ops of
-      [] -> #current{};
+   case Result of
+      #seq{ ops = S4OPs } -> #seq{ ops = remove_overridden_operations(S4OPs) };
       _ -> Result
    end;
 aggressive (In = #apply_fun{ params = OPs }) ->
@@ -171,8 +204,5 @@ light (#seq{ ops = S0OPs }) ->
    S2OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S1OPs),
    Result = optimize_update_field_sequence(S2OPs, []),
 
-   case Result#seq.ops of
-      [] -> #current{};
-      _ -> Result
-   end;
+   Result;
 light (OP) -> OP.
