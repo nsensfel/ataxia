@@ -3,53 +3,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-include("ataxia/ataxic.hrl").
 
 %%%% BASIC OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% Select
--record(field, {ix :: non_neg_integer(), op :: basic()}).
--record(upfield, {ix :: non_neg_integer(), op :: basic()}).
-
-%%%% Sequence of instructions
--record(seq, {ops :: list(basic())}).
-
-%%%% Values Access
--record(const, {value :: any()}).
--record(current, {}).
-
-% Possible improvement: add support for some sort of registers.
-% This would add a dict (no need for orddict here) when evaluating Ataxic
-% expressions, with the following functions:
-% -record(reg_store, {name :: binary(), op :: basic()}).
-% -record(reg_load, {name :: binary()}).
-% It's kind of weird to use though, cause you can't retrieve what you've stored
-% at a node that was deeper in the query's tree. It can be used to move values
-% further down (or horizontally) though, and there are already instructions that
-% give you values found further down.
-
--record
-(
-   apply_fun,
-   {
-      module :: atom(),
-      function :: atom(),
-      params :: list(basic())
-   }
-).
-
-%%%% Number Comparison
--record(gt, {p0 :: basic(), p1 :: basic()}).
--record(ge, {p0 :: basic(), p1 :: basic()}).
--record(lt, {p0 :: basic(), p1 :: basic()}).
--record(le, {p0 :: basic(), p1 :: basic()}).
--record(eq, {p0 :: basic(), p1 :: basic()}).
-
-%%%% Bool Operations
--record(land, {params :: list(basic())}).
--record(lor, {params :: list(basic())}).
--record(neg, {param :: basic()}).
-
--record(list_cons, {param :: basic()}).
-
 -type basic() ::
    #field{}
    | #upfield{}
@@ -78,14 +34,6 @@
    | #list_cons{}.
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% Select
--record(read_perm, {op :: basic()}).
--record(write_perm, {op :: basic()}).
--record(lock, {op :: basic()}).
--record(value, {op :: basic()}).
-
--record(mseq, {ops :: list(meta())}).
-
 -type meta() :: #read_perm{} | #write_perm{} | #value{} | #lock{} | #mseq{}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -126,7 +74,7 @@
 
 -export([apply_to/2, matches/2]).
 
--export([optimize/1, is_constant/1]).
+-export([is_constant/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -172,102 +120,6 @@ basic_apply_to (#neg{ param = V }, Val) ->
 
 basic_apply_to (#list_cons{ param = V }, Val) ->
    [basic_apply_to(V, Val)|Val].
-
--spec optimize_update_field_sequence (list(basic()), list(basic())) -> basic().
-optimize_update_field_sequence ([], Result) ->
-   case Result of
-      [A] -> A;
-      _ -> sequence(Result)
-   end;
-optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
-   {FieldUpdates, PotentiallyImportantOPs} =
-      lists:splitwith(fun (E) -> is_record(E, upfield) end, UnsortedOPs),
-
-   SortedFieldUpdates =
-      lists:sort
-      (
-         fun (A, B) ->
-            ((A#upfield.ix) =< (B#upfield.ix))
-         end,
-         FieldUpdates
-      ),
-
-   {LastIX, LastUpdateOPs, OtherMergedFieldUpdates} =
-      lists:foldl
-      (
-         fun (Update, {CurrentIX, CurrentOPs, CurrentResult}) ->
-            case (Update#upfield.ix == CurrentIX) of
-               true ->
-                  {CurrentIX, [Update#upfield.op|CurrentOPs], CurrentResult};
-
-               _ ->
-                  {
-                     Update#upfield.ix,
-                     [Update#upfield.op],
-                     (
-                        case CurrentOPs of
-                           [] -> CurrentResult;
-                           [OP] ->
-                              [
-                                 update_field(CurrentIX, OP)
-                                 |CurrentResult
-                              ];
-                           _ ->
-                              [
-                                 update_field(CurrentIX, sequence(CurrentOPs))
-                                 |CurrentResult
-                              ]
-                        end
-                     )
-                  }
-            end
-         end,
-         {-1, [], []},
-         SortedFieldUpdates
-      ),
-
-   MergedFieldUpdates =
-      (
-         case LastUpdateOPs of
-            [] -> OtherMergedFieldUpdates;
-            [OP] ->
-               [
-                  update_field(LastIX, OP)
-                  |OtherMergedFieldUpdates
-               ];
-            _ ->
-               [
-                  update_field(LastIX, sequence(LastUpdateOPs))
-                  |OtherMergedFieldUpdates
-               ]
-         end
-      ),
-   {ImportantOPs, PotentialFieldUpdates} =
-      lists:splitwith
-      (
-         fun (E) -> not is_record(E, upfield) end,
-         PotentiallyImportantOPs
-      ),
-
-   optimize_update_field_sequence
-   (
-      PotentialFieldUpdates,
-      (CurrentResults ++ MergedFieldUpdates ++ ImportantOPs)
-   ).
-
--spec flatten_sequence (list(basic())) -> list(basic()).
-flatten_sequence (OPs) ->
-   lists:foldl
-   (
-      fun (E, CurrentOPs) ->
-         case is_record(E, seq) of
-            true -> (E#seq.ops ++ CurrentOPs);
-            _ -> [E|CurrentOPs]
-         end
-      end,
-      [],
-      OPs
-   ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -333,13 +185,6 @@ update_write_permission (OP) -> #write_perm{ op = OP }.
 
 -spec update_value (basic()) -> meta().
 update_value (OP) -> #value{ op = OP }.
-
--spec optimize (basic()) -> basic().
-optimize (#seq{ ops = OPs }) ->
-   S0OPs = flatten_sequence(OPs),
-   S1OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S0OPs),
-   optimize_update_field_sequence(S1OPs, []);
-optimize (OP) -> OP.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
