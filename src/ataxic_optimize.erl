@@ -92,7 +92,7 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
                                  ataxic:update_field
                                  (
                                     CurrentIX,
-                                    ataxic:sequence(CurrentOPs)
+                                    ataxic:sequence(lists:reverse(CurrentOPs))
                                  )
                                  |CurrentResult
                               ]
@@ -117,7 +117,11 @@ optimize_update_field_sequence (UnsortedOPs, CurrentResults) ->
                ];
             _ ->
                [
-                  ataxic:update_field(LastIX, ataxic:sequence(LastUpdateOPs))
+                  ataxic:update_field
+                  (
+                     LastIX,
+                     ataxic:sequence(lists:reverse(LastUpdateOPs))
+                  )
                   |OtherMergedFieldUpdates
                ]
          end
