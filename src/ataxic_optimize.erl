@@ -20,21 +20,23 @@
    )
    -> list(ataxic:basic()).
 remove_overridden_operations (List) ->
-   lists:foldr
-   (
-      fun (Elem, CurrentResult) ->
-         case CurrentResult of
-            {done, _} -> CurrentResult;
-            {ok, List} ->
-               case Elem of
-                  #const{} -> {done, [Elem|List]};
-                  _ -> {ok, [Elem|List]}
-               end
-         end
-      end,
-      {ok, []},
-      List
-   ).
+   {_, Result} =
+      lists:foldr
+      (
+         fun (Elem, CurrentResult) ->
+            case CurrentResult of
+               {done, _} -> CurrentResult;
+               {ok, List} ->
+                  case Elem of
+                     #const{} -> {done, [Elem|List]};
+                     _ -> {ok, [Elem|List]}
+                  end
+            end
+         end,
+         {ok, []},
+         List
+      ),
+   Result.
 
 % list(update_field(a, o0), update(a, o1), ...) -> update_field(a, list(o0, o1))
 -spec optimize_update_field_sequence
@@ -186,7 +188,7 @@ aggressive (In = #apply_fun{ params = OPs }) ->
       params = lists:map(fun aggressive/1, OPs)
    };
 aggressive (In = #list_cons{ param = OP }) ->
-   In#list_cons{ param = lists:map(fun aggressive/1, OP) };
+   In#list_cons{ param = aggressive(OP) };
 aggressive (In = #read_perm{ op = OP }) ->
    In#read_perm{ op = aggressive(OP) };
 aggressive (In = #write_perm{ op = OP }) ->
