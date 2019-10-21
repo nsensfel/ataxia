@@ -303,6 +303,20 @@ aggressive (In = #value{ op = OP }) ->
    In#value{ op = aggressive(OP) };
 aggressive (In = #mseq{ ops = OPs }) ->
    In#mseq{ ops = lists:map(fun aggressive/1, OPs) };
+aggressive (In = #letr{ bindings = Bs, op = OP }) ->
+   In#letr
+   {
+      op = aggressive(OP),
+      bindings =
+         lists:map(fun ({Key, Value}) -> {Key, aggressive(Value)} end, Bs)
+   };
+aggressive (In = #tern{ condition = C, then = T, else = E }) ->
+   In#tern
+   {
+      condition = aggressive(C),
+      then = aggressive(T),
+      else = aggressive(E)
+   };
 aggressive (Other) ->
    Other.
 

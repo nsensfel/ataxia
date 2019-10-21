@@ -155,7 +155,9 @@ apply_basic_to (#letr{ bindings = Bindings, op = OP }, Val, S0Mem) ->
    S1Mem =
       lists:foldl
       (
-         fun ({Key, Value}, Memory) -> dict:store(Key, Value, Memory) end,
+         fun ({Key, Value}, Memory) ->
+            dict:store(Key, apply_basic_to(Value, Val, Memory), Memory)
+         end,
          S0Mem,
          Bindings
       ),
