@@ -41,7 +41,30 @@
 -record(lor, {params :: list(ataxic:basic())}).
 -record(neg, {param :: ataxic:basic()}).
 
+%%%% List Operations
 -record(list_cons, {param :: ataxic:basic()}).
+
+%%%% Condition
+-record
+(
+   tern,
+   {
+      condition :: ataxic:basic(),
+      then :: ataxic:basic(),
+      else :: ataxic:basic()
+   }
+).
+
+%%%% Memory
+-record
+(
+   letr,
+   {
+      bindings :: list({ataxic:variable(), ataxic:basic()}),
+      op :: ataxic:basic()
+   }
+).
+-record (var, { name :: ataxic:variable() }).
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Select

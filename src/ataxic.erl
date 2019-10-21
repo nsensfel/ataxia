@@ -31,14 +31,26 @@
    | #lor{}
    | #neg{}
 
-   | #list_cons{}.
+%%%% List Operations
+   | #list_cons{}
+
+%%%% Condition
+   | #tern{}
+
+%%%% Memory
+   | #letr{}
+   | #var{}
+.
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -type meta() :: #read_perm{} | #write_perm{} | #value{} | #lock{} | #mseq{}.
+
+-type variable() :: atom().
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--export_type([basic/0, meta/0]).
+-export_type([basic/0, meta/0, variable/0]).
 
 -export
 (
@@ -57,7 +69,9 @@
       land/1,
       lor/1,
       neg/1,
-      list_cons/1
+      list_cons/1,
+      ternary/3,
+      bind/2
    ]
 ).
 
@@ -72,58 +86,85 @@
    ]
 ).
 
--export([basic_apply_to/2, apply_to/2, matches/2]).
+-export([apply_basic_to/2, apply_to/2, matches/2]).
 
 -export([is_constant/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec basic_apply_to (basic(), any()) -> any().
-basic_apply_to (#upfield{ ix = IX, op = OP}, Val) ->
-   setelement(IX, Val, basic_apply_to(OP, element(IX, Val)));
-basic_apply_to (#field{ ix = IX, op = OP}, Val) ->
-   basic_apply_to(OP, element(IX, Val));
-basic_apply_to (#apply_fun{ module = M, function = F, params = P }, Val) ->
+-spec apply_basic_to (basic(), any(), dict:dict(variable(), basic())) -> any().
+apply_basic_to (#upfield{ ix = IX, op = OP}, Val, Mem) ->
+   setelement(IX, Val, apply_basic_to(OP, element(IX, Val), Mem));
+apply_basic_to (#field{ ix = IX, op = OP}, Val, Mem) ->
+   apply_basic_to(OP, element(IX, Val), Mem);
+apply_basic_to (#apply_fun{ module = M, function = F, params = P }, Val, Mem) ->
    erlang:apply
    (
       M,
       F,
-      lists:map(fun (Param) -> basic_apply_to(Param, Val) end, P)
+      lists:map(fun (Param) -> apply_basic_to(Param, Val, Mem) end, P)
    );
 
-basic_apply_to (#seq{ ops = List }, Val) ->
-   lists:foldl(fun basic_apply_to/2, Val, List);
+apply_basic_to (#seq{ ops = List }, Val, Mem) ->
+   lists:foldl
+   (
+      fun (OP, CurrentVal) ->
+         apply_basic_to(OP, CurrentVal, Mem)
+      end,
+      Val,
+      List
+   );
 
-basic_apply_to (#const{ value = Val }, _Val) ->
+apply_basic_to (#const{ value = Val }, _Val, _Mem) ->
    Val;
-basic_apply_to (#current{}, Val) ->
+apply_basic_to (#current{}, Val, _Mem) ->
    Val;
+apply_basic_to (#var{ name = Name }, _Val, Mem) ->
+   dict:fetch(Name, Mem);
 
-basic_apply_to (#ge{ p0 = P0, p1 = P1 }, Val) ->
-   basic_apply_to(P0, Val) >= basic_apply_to(P1, Val);
-basic_apply_to (#gt{ p0 = P0, p1 = P1 }, Val) ->
-   basic_apply_to(P0, Val) > basic_apply_to(P1, Val);
-basic_apply_to (#le{ p0 = P0, p1 = P1 }, Val) ->
-   basic_apply_to(P0, Val) =< basic_apply_to(P1, Val);
-basic_apply_to (#lt{ p0 = P0, p1 = P1 }, Val) ->
-   basic_apply_to(P0, Val) < basic_apply_to(P1, Val);
-basic_apply_to (#eq{ p0 = P0, p1 = P1 }, Val) ->
-   basic_apply_to(P0, Val) == basic_apply_to(P1, Val);
+apply_basic_to (#ge{ p0 = P0, p1 = P1 }, Val, Mem) ->
+   apply_basic_to(P0, Val, Mem) >= apply_basic_to(P1, Val, Mem);
+apply_basic_to (#gt{ p0 = P0, p1 = P1 }, Val, Mem) ->
+   apply_basic_to(P0, Val, Mem) > apply_basic_to(P1, Val, Mem);
+apply_basic_to (#le{ p0 = P0, p1 = P1 }, Val, Mem) ->
+   apply_basic_to(P0, Val, Mem) =< apply_basic_to(P1, Val, Mem);
+apply_basic_to (#lt{ p0 = P0, p1 = P1 }, Val, Mem) ->
+   apply_basic_to(P0, Val, Mem) < apply_basic_to(P1, Val, Mem);
+apply_basic_to (#eq{ p0 = P0, p1 = P1 }, Val, Mem) ->
+   apply_basic_to(P0, Val, Mem) == apply_basic_to(P1, Val, Mem);
 
-basic_apply_to (#land{ params = List }, Val) ->
-   lists:all(fun (E) -> basic_apply_to(E, Val) end, List);
-basic_apply_to (#lor{ params = List }, Val) ->
-   lists:any(fun (E) -> basic_apply_to(E, Val) end, List);
-basic_apply_to (#neg{ param = V }, Val) ->
-   not basic_apply_to(V, Val);
+apply_basic_to (#land{ params = List }, Val, Mem) ->
+   lists:all(fun (E) -> apply_basic_to(E, Val, Mem) end, List);
+apply_basic_to (#lor{ params = List }, Val, Mem) ->
+   lists:any(fun (E) -> apply_basic_to(E, Val, Mem) end, List);
+apply_basic_to (#neg{ param = V }, Val, Mem) ->
+   not apply_basic_to(V, Val, Mem);
 
-basic_apply_to (#list_cons{ param = V }, Val) ->
-   [basic_apply_to(V, Val)|Val].
+apply_basic_to (#list_cons{ param = V }, Val, Mem) ->
+   [apply_basic_to(V, Val, Mem)|Val];
+
+apply_basic_to (#tern{ condition = C, then = T, else = E }, Val, Mem) ->
+   case apply_basic_to(C, Val, Mem) of
+      true -> apply_basic_to(T, Val, Mem);
+      false -> apply_basic_to(E, Val, Mem);
+      Other -> error({"Expected boolean from ternary condition, got", Other})
+   end;
+
+apply_basic_to (#letr{ bindings = Bindings, op = OP }, Val, S0Mem) ->
+   S1Mem =
+      lists:foldl
+      (
+         fun ({Key, Value}, Memory) -> dict:store(Key, Value, Memory) end,
+         S0Mem,
+         Bindings
+      ),
+
+   apply_basic_to(OP, Val, S1Mem).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec update_field (non_neg_integer(), basic()) -> basic().
 update_field (IX, OP) -> #upfield{ ix = IX, op = OP }.
 
@@ -171,6 +212,13 @@ neg (V) -> #neg{ param = V }.
 -spec list_cons (basic()) -> basic().
 list_cons (V) -> #list_cons{ param = V}.
 
+-spec ternary (basic(), basic(), basic()) -> basic().
+ternary (Cond, Then, Else) ->
+   #tern{ condition = Cond, then = Then, else = Else }.
+
+-spec bind (list({variable(), basic()}), basic()) -> basic().
+bind (Bindings, OP) -> #letr{ bindings = Bindings, op = OP }.
+
 -spec sequence_meta (list(meta())) -> meta().
 sequence_meta (List) -> #mseq{ ops = List }.
 
@@ -191,35 +239,39 @@ update_value (OP) -> #value{ op = OP }.
 apply_to (#value{ op = OP }, Entry) ->
    ataxia_entry:set_value
    (
-      basic_apply_to(OP, ataxia_entry:get_value(Entry)),
+      apply_basic_to(OP, ataxia_entry:get_value(Entry)),
       Entry
    );
 apply_to (#lock{ op = OP }, Entry) ->
    ataxia_entry:set_lock
    (
-      basic_apply_to(OP, ataxia_entry:get_lock(Entry)),
+      apply_basic_to(OP, ataxia_entry:get_lock(Entry)),
       Entry
    );
 apply_to (#read_perm{ op = OP }, Entry) ->
    ataxia_entry:set_read_permission
    (
-      basic_apply_to(OP, ataxia_entry:get_read_permission(Entry)),
+      apply_basic_to(OP, ataxia_entry:get_read_permission(Entry)),
       Entry
    );
 apply_to (#write_perm{ op = OP }, Entry) ->
    ataxia_entry:set_write_permission
    (
-      basic_apply_to(OP, ataxia_entry:get_write_permission(Entry)),
+      apply_basic_to(OP, ataxia_entry:get_write_permission(Entry)),
       Entry
    );
 apply_to (#mseq { ops = List }, Entry) ->
    lists:foldl(fun apply_to/2, Entry, List).
 
+-spec apply_basic_to (basic(), any()) -> any().
+apply_basic_to (OP, Val) ->
+   apply_basic_to(OP, Val, dict:new()).
+
 -spec matches (basic(), ataxia_entry:type()) -> boolean().
 matches (OP, Entry) ->
-   Result = basic_apply_to(OP, Entry),
+   Result = apply_basic_to(OP, Entry),
    io:format("matches test result:~p~n", [Result]),
-   case basic_apply_to(OP, Entry) of
+   case apply_basic_to(OP, Entry) of
       true -> true;
       _ -> false
    end.
