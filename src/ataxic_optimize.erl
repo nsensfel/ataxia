@@ -26,10 +26,10 @@ remove_overridden_operations (List) ->
          fun (Elem, CurrentResult) ->
             case CurrentResult of
                {done, _} -> CurrentResult;
-               {ok, List} ->
+               {ok, L} ->
                   case Elem of
-                     #const{} -> {done, [Elem|List]};
-                     _ -> {ok, [Elem|List]}
+                     #const{} -> {done, [Elem|L]};
+                     _ -> {ok, [Elem|L]}
                   end
             end
          end,
@@ -166,7 +166,7 @@ optimize_generic_update_sequence
    optimize_generic_update_sequence
    (
       PotentialUpdates,
-      (CurrentResults ++ MergedUpdates ++ ImportantOPs),
+      (CurrentResults ++ lists:reverse(MergedUpdates) ++ ImportantOPs),
       IsCompatible,
       IndexIsBefore,
       NewUpdate,
@@ -233,14 +233,14 @@ optimize_update_orddict_sequence (List) ->
          OP
       end,
       fun (E) ->
-         [IX|_] = E#apply_fun.params,
+         [#const{ value = IX }|_] = E#apply_fun.params,
          IX
       end
    ).
 
 -spec flatten_sequence (list(ataxic:basic())) -> list(ataxic:basic()).
 flatten_sequence (OPs) ->
-   lists:foldl
+   lists:foldr
    (
       fun (E, CurrentOPs) ->
          case is_record(E, seq) of
@@ -285,7 +285,10 @@ aggressive (#seq{ ops = S0OPs }) ->
          _ -> S1Result
       end,
 
-   S2Result;
+   case S2Result of
+      #seq{ ops = [OP] } -> OP;
+      _ -> S2Result
+   end;
 aggressive (In = #apply_fun{ params = OPs }) ->
    In#apply_fun
    {
@@ -340,5 +343,8 @@ light (#seq{ ops = S0OPs }) ->
          _ -> S1Result
       end,
 
-   S2Result;
+   case S2Result of
+      #seq{ ops = [OP] } -> OP;
+      _ -> S2Result
+   end;
 light (OP) -> OP.
