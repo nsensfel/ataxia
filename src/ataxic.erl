@@ -71,7 +71,8 @@
       neg/1,
       list_cons/1,
       ternary/3,
-      bind/2
+      bind/2,
+      variable/1
    ]
 ).
 
@@ -220,6 +221,9 @@ ternary (Cond, Then, Else) ->
 
 -spec bind (list({variable(), basic()}), basic()) -> basic().
 bind (Bindings, OP) -> #letr{ bindings = Bindings, op = OP }.
+
+-spec variable (variable()) -> basic().
+variable (Name) -> #var{ name = Name }.
 
 -spec sequence_meta (list(meta())) -> meta().
 sequence_meta (List) -> #mseq{ ops = List }.
