@@ -3,6 +3,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-include("ataxia/ataxic.hrl").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -25,6 +26,7 @@
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec update_array_cell (non_neg_integer(), ataxic:basic()) -> ataxic:basic().
+update_array_cell (_IX, #current{}) -> nop();
 update_array_cell (IX, OP) ->
    ataxic:apply_function
    (
@@ -32,20 +34,26 @@ update_array_cell (IX, OP) ->
       set,
       [
          ataxic:constant(IX),
-         ataxic:sequence
          (
-            [
-               ataxic:apply_function
-               (
-                  array,
-                  get,
-                  [
-                     ataxic:constant(IX),
-                     ataxic:current_value()
-                  ]
-               ),
-               OP
-            ]
+            case ataxic:is_constant(OP) of
+               true -> OP;
+               false ->
+                  ataxic:sequence
+                  (
+                     [
+                        ataxic:apply_function
+                        (
+                           array,
+                           get,
+                           [
+                              ataxic:constant(IX),
+                              ataxic:current_value()
+                           ]
+                        ),
+                        OP
+                     ]
+                  )
+            end
          ),
          ataxic:current_value()
       ]
@@ -57,6 +65,7 @@ update_array_cell (IX, OP) ->
       ataxic:basic()
    )
    -> ataxic:basic().
+update_orddict_element (_IX, #current{}) -> nop();
 update_orddict_element (IX, OP) ->
    ataxic:apply_function
    (
@@ -101,9 +110,9 @@ update_ordset (Old, New) ->
    Remove = ordsets:subtract(Old, New),
    Add = ordsets:subtract(New, Old),
 
-   ataxic:sequence
-   (
-      [
+   case {ordsets:is_empty(Add), ordsets:is_empty(Remove)} of
+      {true, true} -> nop();
+      {true, false} ->
          ataxic:apply_function
          (
             ordsets,
@@ -112,7 +121,8 @@ update_ordset (Old, New) ->
                ataxic:current_value(),
                ataxic:constant(Remove)
             ]
-         ),
+         );
+      {false, true} ->
          ataxic:apply_function
          (
             ordsets,
@@ -121,6 +131,29 @@ update_ordset (Old, New) ->
                ataxic:current_value(),
                ataxic:constant(Add)
             ]
+         );
+      {false, false} ->
+         ataxic:sequence
+         (
+            [
+               ataxic:apply_function
+               (
+                  ordsets,
+                  substract,
+                  [
+                     ataxic:current_value(),
+                     ataxic:constant(Remove)
+                  ]
+               ),
+               ataxic:apply_function
+               (
+                  ordsets,
+                  union,
+                  [
+                     ataxic:current_value(),
+                     ataxic:constant(Add)
+                  ]
+               )
+            ]
          )
-      ]
-   ).
+   end.
