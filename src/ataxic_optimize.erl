@@ -29,6 +29,7 @@ remove_overridden_operations (List) ->
                {ok, L} ->
                   case Elem of
                      #const{} -> {done, [Elem|L]};
+                     #current{} -> {ok, L};
                      _ -> {ok, [Elem|L]}
                   end
             end
@@ -209,12 +210,12 @@ optimize_update_orddict_sequence (List) ->
                         [
                            #apply_fun
                            {
-                           module = orddict,
-                           function = fetch,
-                           params = [ConstIX2, #current{}]
-                        },
-                        _
-                     ]
+                              module = orddict,
+                              function = fetch,
+                              params = [ConstIX2, #current{}]
+                           },
+                           _
+                        ]
                } -> (ConstIX1 == ConstIX2);
                _ -> false
             end;
@@ -229,8 +230,13 @@ optimize_update_orddict_sequence (List) ->
       end,
       fun ataxic_sugar:update_orddict_element/2,
       fun (E) ->
-         [_,OP|_] = E#apply_fun.params,
-         OP
+         [_,StoreOP|_] = E#apply_fun.params,
+         case StoreOP of
+            #const{} -> StoreOP;
+            #seq{ ops = [_FetchOP|ActualUpdateOP]} ->
+               ataxic:sequence(ActualUpdateOP);
+            _ -> error(bad_optimize)
+         end
       end,
       fun (E) ->
          [#const{ value = IX }|_] = E#apply_fun.params,
