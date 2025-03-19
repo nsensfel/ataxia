@@ -11,7 +11,8 @@
       read_perm :: ataxia_security:permission(),
       write_perm :: ataxia_security:permission(),
       lock :: ataxia_lock:type(),
-      val :: any()
+      val :: any(),
+      version :: non_neg_integer()
    }
 ).
 
@@ -32,6 +33,7 @@
       get_write_permission/1,
       get_value/1,
       get_lock/1,
+      get_version/1,
 
       set_read_permission/2,
       set_write_permission/2,
@@ -52,6 +54,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec update_version (type()) -> type().
+update_version (Item) ->
+   Item#entry
+   {
+      version = ((Item#entry.version + 1) rem 255)
+   }.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -71,7 +79,8 @@ new (ID, ReadPermission, WritePermission, Lock, Value) ->
       read_perm = ReadPermission,
       write_perm = WritePermission,
       lock = Lock,
-      val = Value
+      val = Value,
+      version = 0
    }.
 
 -spec get_id (type()) -> any().
@@ -86,6 +95,9 @@ get_write_permission (#entry { write_perm = Result }) -> Result.
 -spec get_value (type()) -> any().
 get_value (#entry { val = Result }) -> Result.
 
+-spec get_version (type()) -> non_neg_integer().
+get_version (#entry { version = Result }) -> Result.
+
 -spec get_lock (type()) -> any().
 get_lock (#entry { lock = Result }) -> Result.
 
@@ -96,7 +108,7 @@ set_read_permission (Perm, Item) -> Item#entry{ read_perm = Perm }.
 set_write_permission (Perm, Item) -> Item#entry{ write_perm = Perm }.
 
 -spec set_value (any(), type()) -> type().
-set_value (Value, Item) -> Item#entry{ val = Value }.
+set_value (Value, Item) -> update_version(Item#entry{ val = Value }).
 
 -spec set_lock (ataxia_lock:type(), type()) -> type().
 set_lock (Lock, Item) -> Item#entry{ lock = Lock }.
@@ -106,6 +118,9 @@ get_id_field () -> #entry.id.
 
 -spec get_value_field () -> non_neg_integer().
 get_value_field () -> #entry.val.
+
+-spec get_version_field () -> non_neg_integer().
+get_version_field () -> #entry.version.
 
 -spec get_read_permission_field () -> non_neg_integer().
 get_read_permission_field () -> #entry.read_perm.

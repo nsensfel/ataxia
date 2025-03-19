@@ -211,7 +211,7 @@ fetch_if_internals (DB, User, ID, Cond) ->
    -> ({'aborted', any()} | 'ok').
 add_at (DB, ReadPerm, WritePerm, Lock, Value, ID) ->
    Item = ataxia_entry:new(ID, ReadPerm, WritePerm, Lock, Value),
-   case mnesia:transaction(fun add_new_item/2, [DB, Item]) of
+   case mnesia:sync_transaction(fun add_new_item/2, [DB, Item]) of
       {atomic, ok} -> ok;
       {aborted, Val} -> {aborted, Val}
    end.
@@ -280,7 +280,7 @@ reserve (DB, ReadPerm, WritePerm, Lock) ->
    )
    -> ({'aborted', any()} | {'ok', any()}).
 fetch (DB, User, ID) ->
-   case mnesia:transaction(fun mnesia:read/2, [DB, ID]) of
+   case mnesia:sync_transaction(fun mnesia:read/2, [DB, ID]) of
       {atomic, []} -> {aborted, not_found};
       {atomic, [Entry]} ->
          IsAllowed =
@@ -310,7 +310,7 @@ fetch (DB, User, ID) ->
    )
    -> ({'aborted', any()} | {'ok', any()}).
 fetch_if (DB, User, ID, Cond) ->
-   case mnesia:transaction(fun fetch_if_internals/4, [DB, User, ID, Cond]) of
+   case mnesia:sync_transaction(fun fetch_if_internals/4, [DB, User, ID, Cond]) of
       {atomic, {ok, Value}} -> {ok, Value};
       Other -> Other
    end.
@@ -332,7 +332,7 @@ fetch_any (DB, User, Cond) ->
                {ok, _, _} -> Result;
                _ ->
                   case
-                     mnesia:transaction
+                     mnesia:sync_transaction
                      (
                         fun fetch_if_internals/4,
                         [DB, User, Key, Cond]
@@ -363,7 +363,7 @@ fetch_all (DB, User, Cond) ->
       (
          fun (Key) ->
             case
-               mnesia:transaction
+               mnesia:sync_transaction
                (
                   fun fetch_if_internals/4,
                   [DB, User, Key, Cond]
@@ -388,7 +388,7 @@ fetch_all (DB, User, Cond) ->
    -> ({'aborted', any()} | 'ok').
 update (DB, User, Update, ID) ->
    case
-      mnesia:transaction
+      mnesia:sync_transaction
       (
          fun update_internals/4,
          [DB, User, Update, ID]
@@ -409,7 +409,7 @@ update (DB, User, Update, ID) ->
    -> ({'aborted', any()} | 'ok').
 update_if (DB, User, Update, ID, Cond) ->
    case
-      mnesia:transaction
+      mnesia:sync_transaction
       (
          fun update_if_internals/5,
          [DB, User, Update, ID, Cond]
@@ -438,7 +438,7 @@ update_any (DB, User, Update, Cond) ->
                {ok, _} -> Result;
                _ ->
                   case
-                     mnesia:transaction
+                     mnesia:sync_transaction
                      (
                         fun update_if_internals/5,
                         [DB, User, Update, Key, Cond]
@@ -470,7 +470,7 @@ update_all (DB, User, Update, Cond) ->
       (
          fun (Key) ->
             case
-               mnesia:transaction
+               mnesia:sync_transaction
                (
                   fun update_if_internals/5,
                   [DB, User, Update, Key, Cond]
@@ -495,7 +495,7 @@ update_all (DB, User, Update, Cond) ->
    -> ({'aborted', any()} | {'ok', any()}).
 update_and_fetch (DB, User, Update, ID) ->
    case
-      mnesia:transaction
+      mnesia:sync_transaction
       (
          fun update_internals/4,
          [DB, User, Update, ID]
@@ -516,7 +516,7 @@ update_and_fetch (DB, User, Update, ID) ->
    -> ({'aborted', any()} | {'ok', any()}).
 update_and_fetch_if (DB, User, Update, ID, Cond) ->
    case
-      mnesia:transaction
+      mnesia:sync_transaction
       (
          fun update_if_internals/5,
          [DB, User, Update, ID, Cond]
@@ -546,7 +546,7 @@ update_and_fetch_any (DB, User, Update, Cond) ->
                {ok, _} -> Result;
                _ ->
                   case
-                     mnesia:transaction
+                     mnesia:sync_transaction
                      (
                         fun update_if_internals/5,
                         [DB, User, Update, Key, Cond]
@@ -580,7 +580,7 @@ update_and_fetch_all (DB, User, Update, Cond) ->
       (
          fun (Key) ->
             case
-               mnesia:transaction
+               mnesia:sync_transaction
                (
                   fun update_if_internals/5,
                   [DB, User, Update, Key, Cond]
@@ -605,7 +605,7 @@ update_and_fetch_all (DB, User, Update, Cond) ->
    )
    -> ({'aborted', any()} | 'ok').
 remove (DB, User, ID) ->
-   case mnesia:transaction(fun remove_internals/3, [DB, User, ID]) of
+   case mnesia:sync_transaction(fun remove_internals/3, [DB, User, ID]) of
       {atomic, ok} -> ok;
       Other -> {aborted, Other}
    end.
@@ -620,7 +620,7 @@ remove (DB, User, ID) ->
    -> ({'aborted', any()} | 'ok').
 remove_if (DB, User, ID, Cond) ->
    case
-      mnesia:transaction
+      mnesia:sync_transaction
       (
          fun remove_if_internals/4,
          [DB, User, ID, Cond]
@@ -647,7 +647,7 @@ remove_any (DB, User, Cond) ->
                {ok, _} -> Result;
                _ ->
                   case
-                     mnesia:transaction
+                     mnesia:sync_transaction
                      (
                         fun remove_if_internals/4,
                         [DB, User, Key, Cond]
@@ -678,7 +678,7 @@ remove_all (DB, User, Cond) ->
       (
          fun (Key) ->
             case
-               mnesia:transaction
+               mnesia:sync_transaction
                (
                   fun remove_if_internals/4,
                   [DB, User, Key, Cond]

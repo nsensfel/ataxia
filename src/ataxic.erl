@@ -277,7 +277,7 @@ apply_basic_to (OP, Val) ->
 matches (OP, Entry) ->
    Result = apply_basic_to(OP, Entry),
    io:format("matches test result:~p~n", [Result]),
-   case apply_basic_to(OP, Entry) of
+   case Result of
       true -> true;
       _ -> false
    end.
