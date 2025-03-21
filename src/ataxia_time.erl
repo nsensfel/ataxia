@@ -47,6 +47,13 @@ now () -> never.
 -spec in (non_neg_integer()) -> type().
 in (_Seconds) -> never.
 
+-spec seconds_before (type()) -> non_neg_integer().
+seconds_before (Time) -> 0.
+
+-spec as_timeout (type()) -> timeout().
+as_timeout (never) -> infinity.
+as_timeout (calendar:datetime()) -> infinity.
+
 -spec to_string (type()) -> binary().
 to_string (never) -> <<"Never">>;
 to_string (_Date) -> <<"At some point">>.

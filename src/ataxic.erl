@@ -43,7 +43,7 @@
 .
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--type meta() :: #read_perm{} | #write_perm{} | #value{} | #lock{} | #mseq{}.
+-type meta() :: #value{} | #mseq{}.
 
 -type variable() :: atom().
 
@@ -79,9 +79,6 @@
 -export
 (
    [
-      update_read_permission/1,
-      update_write_permission/1,
-      update_lock/1,
       update_value/1,
       sequence_meta/1
    ]
@@ -211,7 +208,6 @@ lor (List) -> #lor{ params = List }.
 -spec neg (basic()) -> basic().
 neg (V) -> #neg{ param = V }.
 
-
 -spec list_cons (basic()) -> basic().
 list_cons (V) -> #list_cons{ param = V}.
 
@@ -228,15 +224,6 @@ variable (Name) -> #var{ name = Name }.
 -spec sequence_meta (list(meta())) -> meta().
 sequence_meta (List) -> #mseq{ ops = List }.
 
--spec update_read_permission (basic()) -> meta().
-update_read_permission (OP) -> #read_perm{ op = OP }.
-
--spec update_lock (basic()) -> meta().
-update_lock (OP) -> #lock{ op = OP }.
-
--spec update_write_permission (basic()) -> meta().
-update_write_permission (OP) -> #write_perm{ op = OP }.
-
 -spec update_value (basic()) -> meta().
 update_value (OP) -> #value{ op = OP }.
 
@@ -246,24 +233,6 @@ apply_to (#value{ op = OP }, Entry) ->
    ataxia_entry:set_value
    (
       apply_basic_to(OP, ataxia_entry:get_value(Entry)),
-      Entry
-   );
-apply_to (#lock{ op = OP }, Entry) ->
-   ataxia_entry:set_lock
-   (
-      apply_basic_to(OP, ataxia_entry:get_lock(Entry)),
-      Entry
-   );
-apply_to (#read_perm{ op = OP }, Entry) ->
-   ataxia_entry:set_read_permission
-   (
-      apply_basic_to(OP, ataxia_entry:get_read_permission(Entry)),
-      Entry
-   );
-apply_to (#write_perm{ op = OP }, Entry) ->
-   ataxia_entry:set_write_permission
-   (
-      apply_basic_to(OP, ataxia_entry:get_write_permission(Entry)),
       Entry
    );
 apply_to (#mseq { ops = List }, Entry) ->
