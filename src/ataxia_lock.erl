@@ -49,8 +49,12 @@
 -export
 (
 	[
+		% Group: [request], {node(), pid()}. To sort the requests by ID
+		% so that if two processes want the 2 same locks, they're much less
+		% likely to both acquire one and block the other process.
+		group/2,
 		write_lock_request/2,
-		read_lock_request/1,
+		read_lock_request/2,
 		start/0
 	]
 ).

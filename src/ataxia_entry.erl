@@ -8,11 +8,9 @@
    entry,
    {
       id :: any(),
-      read_perm :: ataxia_security:permission(),
-      write_perm :: ataxia_security:permission(),
-      lock :: ataxia_lock:type(),
       val :: any(),
-      version :: non_neg_integer()
+      version :: non_neg_integer(), % send back version number on change
+		notify :: list((node(), pid())) % notify of version number change
    }
 ).
 
