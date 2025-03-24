@@ -162,7 +162,9 @@ update_and_fetch_if (DB, Op, ID, Cond) ->
 		atom(),
 		ataxic:meta(),
 		ataxia_id:type(),
-		ataxic:basic()
+		ataxic:basic(),
+		boolean(),
+		boolean()
 	)
 	-> ({'ok', any()} | ataxia_error:type()).
 update_and_fetch_if (DB, Op, ID, Cond) ->
