@@ -1,9 +1,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% ATAXIA CACHE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ATAXIA CACHE MANAGER %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Manager for cached entry processes.
 %
--module(ataxia_cache).
+-module(ataxia_cache_manager).
 -behavior(gen_server).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -38,6 +38,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% FIXME: tie cache entries to manager, so it gets notified of termination.
+%%%% FIXME: multiple cache managers according to ID modulo?
 -spec request_cache_entry (atom(), ataxia_id:type(), ets:tab()) ->
 	{
 		pid(),
@@ -55,6 +57,8 @@ request_cache_entry (DB, ID, State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% TODO: Client object for all client data (known cache lines, cache line manager
+%%%% references - fed at init).
 %%%% 'gen_server' functions
 init (_) -> {ok, ets:new(cache_entries, [])}.
 
@@ -82,10 +86,15 @@ handle_info(_, State) ->
 %%%% Interface Functions
 -spec request_cache_entry (atom(), ataxia_id:type()) -> pid().
 request_cache_entry (DB, ID) ->
-	gen_server:call({global, ataxia_cache}, {request_cache_entry, DB, ID}).
+	gen_server:call
+	(
+		{global, {ataxia_cache_manager, DB}},
+		{request_cache_entry, DB, ID}
+	).
 
--spec start () -> 'ok'.
-start () ->
-	{ok, _} = gen_server:start({global, ataxia_cache}, ?MODULE, none, []),
+-spec start (DB) -> 'ok'.
+start (DB) ->
+	{ok, _} =
+		gen_server:start({global, {ataxia_cache_manager, DB}}, ?MODULE, none, []),
 
 	ok.
