@@ -44,7 +44,7 @@
 (
 	[
 		start/0,
-		request/3
+		request/4
 	]
 ).
 
@@ -68,11 +68,15 @@ init (_) -> {ok, none}.
 % TODO: all non-"none" return should have a timeout to end this cache line and
 % report to the cache manager.
 % TODO: only use casts.
-handle_cast ({request, ReplyTo, RequestID, {fetch, DB, ID}}, State) ->
+handle_cast
+(
+	{request, ReplyTo, RequestID, Lock, {fetch, DB, ID}},
+	State
+) ->
 	Request =
 		case State of
-			none -> [DB, ID, none];
-			Entry -> [DB, ID, Entry#cache_entry.version]
+			none -> [DB, ID, Lock, none];
+			Entry -> [DB, ID, Lock, Entry#cache_entry.version]
 		end,
 	case ataxia_network:request(DB, ID, fetch, Request) of
 		ok ->
@@ -84,12 +88,12 @@ handle_cast ({request, ReplyTo, RequestID, {fetch, DB, ID}}, State) ->
 			),
 			{noreply, State};
 
-		{ok, {NewValue, NewVersion}} ->
+		{ok, NewValue, NewVersion} ->
 			reply_to
 			(
 				ReplyTo,
 				RequestID,
-				{ok, NewVersion, NewValue}
+				{ok, NewValue, NewVersion}
 			),
 			{
 				noreply,
@@ -107,15 +111,15 @@ handle_cast ({request, ReplyTo, RequestID, {fetch, DB, ID}}, State) ->
 	end;
 handle_cast
 (
-	{request, ReplyTo, RequestID, {blind_update, DB, ID, Op}},
+	{request, ReplyTo, RequestID, Lock, {blind_update, DB, ID, Op}},
 	_State
 ) ->
 	reply_to
 	(
 		ReplyTo,
 		RequestID,
-		case ataxia_network:request(DB, ID, blind_update, [DB, ID, Op]) of
-			{ok, _} -> ok;
+		case ataxia_network:request(DB, ID, blind_update, [DB, ID, Lock, Op]) of
+			{ok, NewVersion} -> {ok, NewVersion};
 			Error -> {error, Error}
 		end
 	),
@@ -126,12 +130,13 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{safe_update, DB, ID, Op, ExpectedCurrentVersion, ExpectedNewValue}
 	},
 	none
 ) ->
 	% Cache may have been freed. Still do update attempt.
-	Request = [DB, ID, ExpectedCurrentVersion, Op],
+	Request = [DB, ID, Lock, ExpectedCurrentVersion, Op],
 	case ataxia_network:request(DB, ID, safe_update, Request) of
 		{ok, NewVersion} ->
 			reply_to(ReplyTo, RequestID, {ok, NewVersion}),
@@ -154,10 +159,13 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		_Lock,
 		{safe_update, DB, ID, _Op, ExpectedCurrentVersion, _ExpectedNewValue}
 	},
 	State
 ) when ExpectedCurrentVersion /= State#cache_entry.version ->
+	% Is this a good idea? Any case where it would be reasonable for
+	% the cache to have the wrong version number and the code the correct one?
 	reply_to(ReplyTo, RequestID, {error, version}),
 	{stop, none, {DB, ID, self()}};
 handle_cast
@@ -166,11 +174,12 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{safe_update, DB, ID, Op, ExpectedCurrentVersion, ExpectedNewValue}
 	},
 	_State
 ) ->
-	Request = [DB, ID, ExpectedCurrentVersion, Op],
+	Request = [DB, ID, Lock, ExpectedCurrentVersion, Op],
 	case ataxia_network:request(DB, ID, safe_update, Request) of
 		{ok, NewVersion} ->
 			reply_to(ReplyTo, RequestID, {ok, NewVersion}),
@@ -193,11 +202,20 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{blind_update_then_fetch, DB, ID, Op}
 	},
 	_State
 ) ->
-	case ataxia_network:request(DB, ID, blind_update_then_fetch, [DB, ID, Op]) of
+	case
+		ataxia_network:request
+		(
+			DB,
+			ID,
+			blind_update_then_fetch,
+			[DB, ID, Lock, Op]
+		)
+	of
 		{ok, Version, Value} ->
 			reply_to(ReplyTo, RequestID, {ok, Version, Value}),
 			{
@@ -213,8 +231,12 @@ handle_cast
 			reply_to(ReplyTo, RequestID, {error, Error}),
 			{stop, none, {DB, ID, self()}}
 	end;
-handle_cast ({request, ReplyTo, RequestID, {blind_remove, DB, ID}}, _State) ->
-	case ataxia_network:request(DB, ID, blind_remove, [DB, ID]) of
+handle_cast
+(
+	{request, ReplyTo, RequestID, Lock, {blind_remove, DB, ID}},
+	_State
+) ->
+	case ataxia_network:request(DB, ID, blind_remove, [DB, ID, Lock]) of
 		ok -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
@@ -225,6 +247,7 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{safe_remove, DB, ID, ExpectedCurrentVersion}
 	},
 	none
@@ -235,7 +258,7 @@ handle_cast
 			DB,
 			ID,
 			safe_remove,
-			[DB, ID, ExpectedCurrentVersion]
+			[DB, ID, Lock, ExpectedCurrentVersion]
 		)
 	of
 		ok -> reply_to(ReplyTo, RequestID, ok);
@@ -248,10 +271,13 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		_Lock,
 		{safe_remove, DB, ID, ExpectedCurrentVersion}
 	},
 	State
 ) when State#cache_entry.version /= ExpectedCurrentVersion ->
+	% Is this a good idea? Any case where it would be reasonable for
+	% the cache to have the wrong version number and the code the correct one?
 	reply_to(ReplyTo, RequestID, {error, version}),
 	{stop, none, {DB, ID, self()}};
 handle_cast
@@ -260,6 +286,7 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{safe_remove, DB, ID, ExpectedCurrentVersion}
 	},
 	_State
@@ -270,7 +297,7 @@ handle_cast
 			DB,
 			ID,
 			safe_remove,
-			[DB, ID, ExpectedCurrentVersion]
+			[DB, ID, Lock, ExpectedCurrentVersion]
 		)
 	of
 		ok -> reply_to(ReplyTo, RequestID, ok);
@@ -283,14 +310,15 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{fetch_if, DB, ID, Cond}
 	},
 	State
 ) ->
 	Request =
 		case State of
-			none -> [DB, ID, none, Cond];
-			Entry -> [DB, ID, Entry#cache_entry.version, Cond]
+			none -> [DB, ID, Lock, none, Cond];
+			Entry -> [DB, ID, Lock, Entry#cache_entry.version, Cond]
 		end,
 	case ataxia_network:request(DB, ID, fetch_if, Request) of
 		ok ->
@@ -320,10 +348,12 @@ handle_cast
 	end;
 handle_cast
 (
-	{request, ReplyTo, RequestID, {blind_update_if, DB, ID, Cond, Op}},
+	{request, ReplyTo, RequestID, Lock, {blind_update_if, DB, ID, Cond, Op}},
 	_State
 ) ->
-	case ataxia_network:request(DB, ID, blind_update_if, [DB, ID, Cond, Op]) of
+	case
+		ataxia_network:request(DB, ID, blind_update_if, [DB, ID, Lock, Cond, Op])
+	of
 		{ok, _} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
@@ -334,6 +364,7 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{blind_update_if_then_fetch, DB, ID, Cond, Op}
 	},
 	_State
@@ -344,7 +375,7 @@ handle_cast
 			DB,
 			ID,
 			blind_update_if_then_fetch,
-			[DB, ID, Cond, Op]
+			[DB, ID, Lock, Cond, Op]
 		)
 	of
 		{ok, Version, Value} ->
@@ -361,6 +392,7 @@ handle_cast
 		request,
 		ReplyTo,
 		RequestID,
+		Lock,
 		{blind_update_if_else_fetch, DB, ID, Cond, Op}
 	},
 	_State
@@ -371,7 +403,7 @@ handle_cast
 			DB,
 			ID,
 			blind_update_if_else_fetch,
-			[DB, ID, Cond, Op]
+			[DB, Lock, ID, Cond, Op]
 		)
 	of
 		{ok, _} ->
@@ -388,10 +420,10 @@ handle_cast
 	end;
 handle_cast
 (
-	{request, ReplyTo, RequestID, {blind_remove_if, DB, ID, Cond}},
+	{request, ReplyTo, RequestID, Lock, {blind_remove_if, DB, ID, Cond}},
 	State
 ) ->
-	case ataxia_network:request(DB, ID, blind_remove_if, [DB, ID, Cond]) of
+	case ataxia_network:request(DB, ID, blind_remove_if, [DB, ID, Lock, Cond]) of
 		ok ->
 			reply_to(ReplyTo, RequestID, ok),
 			{stop, none, {DB, ID, self()}};
@@ -425,6 +457,12 @@ start () ->
 	{ok, PID} = gen_server:start_link(?MODULE, none, []),
 	{ok, PID}.
 
--spec request (pid(), non_neg_integer(), term()) -> 'ok'.
-request (EntryPID, RequestID, Request) ->
-	gen_server:cast(EntryPID, {request, self(), RequestID, Request}).
+-spec request
+(
+	pid(),
+	non_neg_integer(),
+	ataxia_lock_client:type(),
+	term()
+) -> 'ok'.
+request (EntryPID, RequestID, Lock, Request) ->
+	gen_server:cast(EntryPID, {request, self(), RequestID, Lock, Request}).

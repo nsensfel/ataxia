@@ -17,8 +17,10 @@
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% FIXME: needs sqfe_update_else_fetch, to retry upon failure.
-%% FIXME:: needs lock handling. How do you cancel a pending lock request, though?
+%% FIXME: needs lock handling. How do you cancel a pending lock request, though?
 %% Release?
+%% Client gets a lock, then performs requests, then releases it.
+%% Getting multiple locks should be done in {DB, ID} alphabetical order.
 -export
 (
 	[
