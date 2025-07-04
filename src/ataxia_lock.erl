@@ -158,6 +158,15 @@ init (_) ->
 		}
 	};
 
+handle_call ({has_lock, Mode, Holder}, State) ->
+	Result =
+		case {Mode, State#lock.status} of
+			{A, B} when A == B -> sets:is_element(Holder, State#lock.holders);
+			{read, write} -> sets:is_element(Holder, State#lock.holders);
+			_ -> false
+		end,
+	{reply, Result, State}.
+
 handle_cast (timeout, State) ->
 	S0State = timeout(State),
 	case S0tate#lock.status of
@@ -236,6 +245,13 @@ handle_info(_, State) ->
 
 new () ->
 	gen_server:start_link(?MODULE, [], []).
+
+has_lock (ClientNode, ClientPID, Mode, LockPID) ->
+	gen_server:call
+	(
+		LockPID,
+		{has_lock, Mode, #holder{ node = ClientNode, pid = ClientPID } }
+	).
 
 request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
 	{ok, LockPID} = gen_server:call(ataxia_lock_manager, get_lock, [DB, ID]),
