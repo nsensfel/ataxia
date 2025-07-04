@@ -6,7 +6,7 @@
 -include("ataxia/ataxic.hrl").
 
 %%%% BASIC OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--type basic() ::
+-type type() ::
    #field{}
    | #upfield{}
 
@@ -43,8 +43,6 @@
 .
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--type meta() :: #value{} | #mseq{}.
-
 -type variable() :: atom().
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -91,7 +89,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec apply_basic_to (basic(), any(), dict:dict(variable(), basic())) -> any().
+-spec apply_basic_to (type(), any(), dict:dict(variable(), type())) -> any().
 apply_basic_to (#upfield{ ix = IX, op = OP}, Val, Mem) ->
    setelement(IX, Val, apply_basic_to(OP, element(IX, Val), Mem));
 apply_basic_to (#field{ ix = IX, op = OP}, Val, Mem) ->
@@ -165,66 +163,66 @@ apply_basic_to (#letr{ bindings = Bindings, op = OP }, Val, S0Mem) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec update_field (non_neg_integer(), basic()) -> basic().
+-spec update_field (non_neg_integer(), type()) -> type().
 update_field (IX, OP) -> #upfield{ ix = IX, op = OP }.
 
--spec field (non_neg_integer(), basic()) -> basic().
+-spec field (non_neg_integer(), type()) -> type().
 field (IX, OP) -> #field{ ix = IX, op = OP }.
 
--spec sequence (list(basic())) -> basic().
+-spec sequence (list(type())) -> type().
 sequence (List) -> #seq{ ops = List }.
 
--spec apply_function (atom(), atom(), list(basic())) -> basic().
+-spec apply_function (atom(), atom(), list(type())) -> type().
 apply_function (Module, Function, Params) ->
    #apply_fun{ module = Module, function = Function, params = Params}.
 
--spec constant (any()) -> basic().
+-spec constant (any()) -> type().
 constant (Val) -> #const{ value = Val }.
 
--spec current_value () -> basic().
+-spec current_value () -> type().
 current_value () -> #current{}.
 
--spec ge (basic(), basic()) -> basic().
+-spec ge (type(), type()) -> type().
 ge (P0, P1) -> #ge{ p0 = P0, p1 = P1 }.
 
--spec gt (basic(), basic()) -> basic().
+-spec gt (type(), type()) -> type().
 gt (P0, P1) -> #gt{ p0 = P0, p1 = P1 }.
 
--spec le (basic(), basic()) -> basic().
+-spec le (type(), type()) -> type().
 le (P0, P1) -> #le{ p0 = P0, p1 = P1 }.
 
--spec lt (basic(), basic()) -> basic().
+-spec lt (type(), type()) -> type().
 lt (P0, P1) -> #lt{ p0 = P0, p1 = P1 }.
 
--spec eq (basic(), basic()) -> basic().
+-spec eq (type(), type()) -> type().
 eq (P0, P1) -> #eq{ p0 = P0, p1 = P1 }.
 
--spec land (list(basic())) -> basic().
+-spec land (list(type())) -> type().
 land (List) -> #land{ params = List }.
 
--spec lor (list(basic())) -> basic().
+-spec lor (list(type())) -> type().
 lor (List) -> #lor{ params = List }.
 
--spec neg (basic()) -> basic().
+-spec neg (type()) -> type().
 neg (V) -> #neg{ param = V }.
 
--spec list_cons (basic()) -> basic().
+-spec list_cons (type()) -> type().
 list_cons (V) -> #list_cons{ param = V}.
 
--spec ternary (basic(), basic(), basic()) -> basic().
+-spec ternary (type(), type(), type()) -> type().
 ternary (Cond, Then, Else) ->
    #tern{ condition = Cond, then = Then, else = Else }.
 
--spec bind (list({variable(), basic()}), basic()) -> basic().
+-spec bind (list({variable(), type()}), type()) -> type().
 bind (Bindings, OP) -> #letr{ bindings = Bindings, op = OP }.
 
--spec variable (variable()) -> basic().
+-spec variable (variable()) -> type().
 variable (Name) -> #var{ name = Name }.
 
 -spec sequence_meta (list(meta())) -> meta().
 sequence_meta (List) -> #mseq{ ops = List }.
 
--spec update_value (basic()) -> meta().
+-spec update_value (type()) -> meta().
 update_value (OP) -> #value{ op = OP }.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -238,11 +236,11 @@ apply_to (#value{ op = OP }, Entry) ->
 apply_to (#mseq { ops = List }, Entry) ->
    lists:foldl(fun apply_to/2, Entry, List).
 
--spec apply_basic_to (basic(), any()) -> any().
+-spec apply_basic_to (type(), any()) -> any().
 apply_basic_to (OP, Val) ->
    apply_basic_to(OP, Val, dict:new()).
 
--spec matches (basic(), ataxia_entry:type()) -> boolean().
+-spec matches (type(), ataxia_entry:type()) -> boolean().
 matches (OP, Entry) ->
    Result = apply_basic_to(OP, Entry),
    io:format("matches test result:~p~n", [Result]),
@@ -251,6 +249,6 @@ matches (OP, Entry) ->
       _ -> false
    end.
 
--spec is_constant (basic()) -> boolean().
+-spec is_constant (type()) -> boolean().
 is_constant (#const{}) -> true;
 is_constant(_) -> false.

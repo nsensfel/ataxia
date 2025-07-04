@@ -4,43 +4,43 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--type category() :: unlocked | read_lock | write_lock.
+-type category() :: unlocked | read | write.
 
 -record
 (
-	lock_stored_request,
+	holder,
 	{
-		is_write :: bool(),
 		node :: node(),
 		pid :: pid()
 	}
 ).
 
+-type holder() :: #holder{}.
+
 -record
 (
 	request,
 	{
-		db :: atom(),
-		id :: ataxia_id:type(),
-		category :: category()
+		is_write :: bool(),
+		client :: holder(),
+		local_pid :: pid()
 	}
 ).
+
+-type request() :: #request{}.
 
 -record
 (
 	lock,
 	{
-		db :: atom(),
-		id :: ataxia_id:type(),
 		status :: category(),
 		timeout :: pid(),
-		queue :: queue(lock_stored_request()),
-		holders :: [lock_stored_request()]
+		queue :: queue(request()),
+		holders :: sets:set(holder())
 	}
 ).
 
 -type type() :: #lock{}.
--type stored_request() :: #lock_stored_request{}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -49,7 +49,6 @@
 (
 	[
 		type/0,
-		request/0,
 		category/0
 	]
 ).
@@ -71,9 +70,9 @@
 -export
 (
 	[
-		handle_requests/2,
-		write_lock_stored_request/2,
-		read_lock_stored_request/2,
+		request_lock/2,
+		write_stored_request/2,
+		read_stored_request/2,
 		release_request/2,
 		start/0
 	]
@@ -82,35 +81,28 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec grant (lock_stored_request(), category(), type()) -> type().
-grant (Request, Msg, State) ->
-	{Request#lock_stored_request.node, Request#lock_stored_request.pid} !
-		{granted,
-			#request
-			{
-				id = State#lock.id,
-				db = State#lock.db,
-				category = Msg
-			}
-		},
+-spec grant (request(), category(), type()) -> type().
+grant (Request, Category, State) ->
+	Request#request.local_pid ! granted,
 	State#lock
 	{
-		holders = ordsets:add_element(Request, State#lock.holders)
+		status = Category,
+		holders = sets:add_element(Request#client, State#lock.holders)
 	}.
 
--spec notify_all_read_locks (type()) -> type().
-notify_all_read_locks (State) ->
+-spec notify_all_reads (type()) -> type().
+notify_all_reads (State) ->
 	case queue:out(State#lock.queue) of
 		empty -> State;
 		{{ok, Value}, NewQueue} ->
-			if Value#lock_stored_request.is_write
-				State
-			else
-				S0State#lock{ queue = NewQueue },
-				S1State = grant(Value, read_lock, S0State),
-				notify_all_read_locks(B, S1State)
+			case Value#request.is_write of
+				true -> State;
+				_ ->
+					S0State#lock{ queue = NewQueue },
+					S1State = grant(Value, read, S0State),
+					notify_all_reads(B, S1State)
 			end
-	end
+	end.
 
 -spec request_timeout (type()) -> ok.
 request_timeout (State) ->
@@ -119,22 +111,24 @@ request_timeout (State) ->
 
 -spec timeout (type()) -> type().
 timeout (State) ->
-	S0State = State#lock{ holders = ordsets:new() },
+	S0State = State#lock{ holders = sets:new() },
 	case queue:out(S0State#lock.queue) of
 		empty -> S0State#lock{ status = unlocked };
 		{{ok, Value}, NewQueue} ->
-			if Value#lock_stored_request.is_write
-				S1State = grant(Value, write_lock, S0State),
-				request_timeout(S1State),
-				S1State#lock
-				{
-					queue = NewQueue,
-					status = write_lock
-				}
-			else
-				S1State = notify_all_readlocks(S0State),
-				request_timeout(S1State),
-				S1State#lock{ status = read_locked }
+			case Value#request.is_write of
+				true ->
+					S1State = grant(Value, write, S0State),
+					request_timeout(S1State),
+					S1State#lock
+					{
+						queue = NewQueue,
+						status = write
+					};
+
+				_ ->
+					S1State = notify_all_readlocks(S0State),
+					request_timeout(S1State),
+					S1State#lock{ status = readed }
 			end
 	end.
 
@@ -152,17 +146,15 @@ timeout_process (Pid) ->
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% 'gen_server' functions
-init ({DB, ID}) ->
+init (_) ->
 	{
 		ok,
 		#lock
 		{
-			db = DB,
-			id = ID,
 			status = unlocked,
 			timeout = spawn(?MODULE, timeout_process, [pid()]),
 			queue = queue:new(),
-			holders = ordsets:new()
+			holders = sets:new()
 		}
 	};
 
@@ -175,32 +167,49 @@ handle_cast (timeout, State) ->
 
 		_ -> {noreply, S0State}
 	end;
-handle_cast ({write_lock, Node, PID}, State) ->
-	Request = #lock_stored_request{ node = Node, pid = PID, is_write = true },
-	NewState = State#lock{ queue = queue:in(Request, State#lock.queue) }
-	{noreply, NewState};
-handle_cast ({read_lock, Node, PID}, State) ->
-	Request = #lock_stored_request{ node = Node, pid = PID, is_write = false },
+handle_cast ({write, LocalPID, ClientNode, ClientPID}, State) ->
 	case State#lock.status of
-		write_lock ->
+		unlocked -> {noreply, grant(Request, write, State)};
+		_ ->
+			Request =
+				#request
+				{
+					client = #holder{ pid = ClientPID, node = ClientNode },
+					local_pid = LocalPID,
+					is_write = true
+				},
+			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) }
+			{noreply, NewState}
+	end;
+handle_cast ({read, LocalPID, ClientNode, ClientPID}, State) ->
+	Request =
+		#request
+		{
+			client = #holder{ pid = ClientPID, node = ClientNode },
+			local_pid = LocalPID,
+			is_write = false
+		},
+	case State#lock.status of
+		write ->
 			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) },
 			{noreply, NewState};
 
-		_ ->
-			S0State = grant(Request, read_lock, State),
+		_ when (queue:len(State#queue) == 0) ->
+			S0State = grant(Request, read, State),
 			request_timeout(S0State),
-			{noreply, S0State}
+			{noreply, S0State};
+
+		_ ->
+			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) },
+			{noreply, NewState};
 	end;
-handle_cast ({unlocked, IsWrite, Node, PID}, State) ->
-	Request = #lock_stored_request{ node = Node, pid = PID, is_write = IsWrite },
+handle_cast ({unlocked, ClientNode, ClientPID}, State) ->
+	Holder = #holder{ node = ClientNode, pid = ClientPID }),
 	S0State =
-		State#lock
-		{
-			holders = ordsets:del_element(Request, State#lock.holders)
-		},
+		State#lock{ holders = sets:del_element(Holder, State#lock.holders) },
 
 	S1State =
-		if ordsets:is_empty(S0State#lock.holders)
+		if sets:is_empty(S0State#lock.holders)
 			timeout(S0State)
 		else
 			S0State
@@ -225,15 +234,15 @@ format_status (_, [_, State]) ->
 handle_info(_, State) ->
 	{noreply, State}.
 
-%%%% Interface Functions
-% handle_requests: [request], {node(), pid()}. To sort the requests by ID
-% so that if two processes want the 2 same locks, they're much less
-% likely to both acquire one and block the other process.
--spec handle_requests ([request()]) -> pid().
-handle_requests (Requests) ->
+new () ->
+	gen_server:start_link(?MODULE, [], []).
 
-		create_request/3,
-		request_write_lock/2,
-		request_read_lock/2,
-		request_lock_release/2,
-		start/0
+request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
+	{ok, LockPID} = gen_server:call(ataxia_lock_manager, get_lock, [DB, ID]),
+	gen_server:cast(LockPID, {Mode, self(), ClientNode, ClientPID}),
+	receive
+		granted -> {node(), LockPID}
+	end.
+
+release_lock (UserNode, UserPID, LockPid) ->
+	gen_server:cast(LockPID, {unlocked, ClientNode, ClientPID}).
