@@ -6,9 +6,12 @@
 -module(ataxia_cache_manager).
 -behavior(gen_server).
 
+-define(MANAGER_COUNT, 12).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-type state() :: dict:dict({atom(), ataxia_id:type()}, pid()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -40,17 +43,17 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% FIXME: tie cache entries to manager, so it gets notified of termination.
 %%%% FIXME: multiple cache managers according to ID modulo?
--spec request_cache_entry (atom(), ataxia_id:type(), ets:tab()) ->
+-spec request_cache_entry (atom(), ataxia_id:type(), state()) ->
 	{
 		pid(),
-		ets:tab()
+		state()
 	}.
 request_cache_entry (DB, ID, State) ->
-	case ets:lookup(State, {DB, ID}) of
-		[{_, Result}] -> {Result, State};
-		[] ->
+	case dict:find({DB, ID}, State) of
+		{ok, Result} -> {Result, State};
+		error ->
 			Result = ataxia_cache_entry:start(DB, ID),
-			NewState = ets:insert(State, {{DB, ID}, Result}),
+			NewState = dict:store({DB, ID}, Result, State),
 			{Result, NewState}
 	end.
 
@@ -60,13 +63,11 @@ request_cache_entry (DB, ID, State) ->
 %%%% TODO: Client object for all client data (known cache lines, cache line manager
 %%%% references - fed at init).
 %%%% 'gen_server' functions
-init (_) -> {ok, ets:new(cache_entries, [])}.
+init (_) -> {ok, dict:new()}.
 
 handle_call ({request_cache_entry, DB, ID}, _From, State) ->
 	{PID, NewState} = request_cache_entry(DB, ID, State),
-	{reply, PID, NewState};
-handle_call ({free, ID, DB}, _, State) ->
-	{noreply, free_id(ID, DB, State)}.
+	{reply, PID, NewState}.
 
 handle_cast ({request_cache_entry, DB, ID}, State) ->
 	{PID, NewState} = request_cache_entry(DB, ID, State),
@@ -80,21 +81,22 @@ code_change (_, State, _) ->
 format_status (_, [_, State]) ->
 	[{data, [{"State", State}]}].
 
-handle_info(_, State) ->
-	{noreply, State}.
+handle_info({'EXIT', _From, {none, {DB, ID, _PID}}}, State) ->
+	{noreply, dict:erase({DB, ID}, State)}.
 
 %%%% Interface Functions
 -spec request_cache_entry (atom(), ataxia_id:type()) -> pid().
 request_cache_entry (DB, ID) ->
+	IX = ataxia_id:mod(ID, ?MANAGER_COUNT),
 	gen_server:call
 	(
-		{global, {ataxia_cache_manager, DB}},
+		{global, {ataxia_cache_manager, IX}},
 		{request_cache_entry, DB, ID}
 	).
 
--spec start (DB) -> 'ok'.
-start (DB) ->
+-spec start (non_neg_integer()) -> 'ok'.
+start (IX) ->
 	{ok, _} =
-		gen_server:start({global, {ataxia_cache_manager, DB}}, ?MODULE, none, []),
+		gen_server:start({global, {ataxia_cache_manager, IX}}, ?MODULE, none, []),
 
 	ok.

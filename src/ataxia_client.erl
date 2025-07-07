@@ -3,15 +3,21 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-define(TIMEOUT, 100000).
+
 -record
 (
 	client,
 	{
-		known_cache_entries :: orddict({DB, ID}, pid()),
-		cache_entry_managers :: orddict(non_neg_integer(), pid()),
+		known_cache_entries :: dict:dict({node(), pid()}, pid()),
+		cache_entry_managers :: dict:dict(non_neg_integer(), pid()),
 		next_request_id :: non_neg_integer()
 	}
 ).
+
+-type type() :: #client{}.
+
+-export_type([type/0]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -25,63 +31,53 @@
 (
 	[
 		new/0,
-		merge/2, % merges 2 clients from 2 asynchronous calls.
+		merge/2 % merges 2 clients from 2 asynchronous calls.
 	]
 ).
 
 -export
 (
 	[
-		add/5,
-		add_at/6,
-		reserve/4,
-		reserve_at/5,
+		add/4,
+		add_at/5,
 
-		fetch/3,
-		update/4,
-		update_and_fetch/4,
-		remove/3,
+		fetch/4,
+		blind_update/5,
+		safe_update/7,
+		blind_update_then_fetch/5,
+		blind_remove/4,
+		safe_remove/5,
 
-		fetch_if/4,
-		update_if/5,
-		update_and_fetch_if/5,
-		update_if_else_fetch/5,
-		remove_if/4,
+		fetch_if/5,
+		blind_update_if/6,
+		blind_update_if_then_fetch/6,
+		blind_update_if_else_fetch/6,
+		blind_remove_if/5
 
 		% TODO any_where, all_where variants.
-		fetch_any/3,
-		update_any/4,
-		update_and_fetch_any/4,
-		remove_any/3,
-
-		fetch_all/3,
-		update_all/4,
-		update_and_fetch_all/4,
-		remove_all/3
+%		fetch_any/3,
+%		update_any/4,
+%		update_and_fetch_any/4,
+%		remove_any/3,
+%
+%		fetch_all/3,
+%		update_all/4,
+%		update_and_fetch_all/4,
+%		remove_all/3
 	]
 ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec get_debug_db_node () -> node().
-get_debug_db_node () -> list_to_atom("db_node@" ++ net_adm:localhost()).
-
--spec get_random_db_node () -> node().
-get_random_db_node () ->
-	get_debug_db_node().
-
--spec get_db_node_for (ataxia_id:type()) -> node().
-get_db_node_for (_ObjectID) ->
-	get_debug_db_node().
-
 -spec await_reply
 (
 	type(),
 	atom(),
 	ataxia_id:type(),
 	any(),
-	pid()
+	pid(),
+	non_neg_integer()
 )
 -> {type(), any()}.
 await_reply (Client, DB, ID, Request, EntryPID, RequestID) ->
@@ -102,8 +98,7 @@ await_reply (Client, DB, ID, Request, EntryPID, RequestID) ->
 )
 -> {type(), any()}.
 request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
-	ManagerKey = ataxia_cache_manager:get_key_for(DB, ID),
-	ManagerPID = orddict:fetch(ManagerKey),
+	ManagerPID = ataxia_cache_manager:get_pid_for(Client, DB, ID),
 	NewEntryPID =
 		ataxia_cache_manager:request_entry_for
 		(
@@ -120,7 +115,7 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 				Client#client
 				{
 					known_cache_entries =
-						orddict:store
+						dict:store
 						(
 							{DB, ID},
 							NewEntryPID,
@@ -130,7 +125,8 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 				DB,
 				ID,
 				Request,
-				NewEntryPID
+				NewEntryPID,
+				0
 			);
 
 		false -> request_new_handler_of(Client, DB, ID, Request, NewEntryPID)
@@ -145,19 +141,16 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 )
 -> {type(), any()}.
 request (Client, DB, ID, Request) ->
-	case orddict:find(Client#client.known_cache_entries, {BD, ID}) of
+	case dict:find(Client#client.known_cache_entries, {DB, ID}) of
 		{ok, EntryPID} ->
-			ataxia_cache_entry:request(NewEntryPID, Request),
+			ataxia_cache_entry:request(EntryPID, Request),
 			case is_process_alive(EntryPID) of
-				true -> await_reply(Client, DB, ID, Request, EntryPID);
+				true -> await_reply(Client, DB, ID, Request, EntryPID, 0);
 				false -> request_new_handler_of(Client, DB, ID, Request, EntryPID)
 			end;
 
 		error -> request_new_handler_of(Client, DB, ID, Request, none)
 	end.
-
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_update, DB, ID}).
 
 -spec merge_cache_entry_dicts
 	(
@@ -171,7 +164,7 @@ request (Client, DB, ID, Request) ->
 merge_cache_entry_dicts (_Client, _DB, _ID, A, B) when A == B -> A;
 merge_cache_entry_dicts (Client, DB, ID, _A, _B) ->
 	ManagerKey = ataxia_cache_manager:get_key_for(DB, ID),
-	ManagerPID = orddict:fetch(ManagerKey, Client#client.cache_entry_managers),
+	ManagerPID = dict:fetch(ManagerKey, Client#client.cache_entry_managers),
 	ataxia_cache_manager:peek_entry_for(ManagerPID, DB, ID).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -181,7 +174,7 @@ merge_cache_entry_dicts (Client, DB, ID, _A, _B) ->
 new () ->
 	#client
 	{
-		known_cache_entries = orddict:new(),
+		known_cache_entries = dict:new(),
 		cache_entry_managers = ataxia_cache_manager:get_cache_entry_managers()
 	}.
 
@@ -190,10 +183,10 @@ merge (ClientA, ClientB) ->
 	ClientA#client
 	{
 		known_cache_entries =
-			orddict:filter
+			dict:filter
 			(
 				fun (_Key, Value) -> Value /= none end,
-				orddict:merge
+				dict:merge
 				(
 					fun ({DB, ID}, A, B) ->
 						merge_cache_entry_dicts(ClientA, DB, ID, A, B)
@@ -210,239 +203,402 @@ merge (ClientA, ClientB) ->
 %%%%
 %%%% Providing everything
 %%%%
--spec add_at (atom(), any(), ataxia_id:type()) -> ('ok' | ataxia_error:type()).
-add_at (Client, DB, Value, ID) ->
-	DBNode = get_db_node_for(ID),
-	rpc:call(DBNode, ataxia_server, add_at, [DB, Value, ID]).
+-spec add_at
+	(
+		type(),
+		atom(),
+		ataxia_id:type(),
+		ataxia_lock:message(),
+		any()
+	)
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer()}
+			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| ataxia_error:type()
+		)
+	}.
+add_at (Client, DB, ID, Lock, Value) ->
+	request(Client, DB, ID, {add_at, DB, ID, Lock, Value}).
 
--spec add (atom(), any()) -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
-add (Client, DB, Value) ->
-	DBNode = get_random_db_node(),
-	rpc:call ( DBNode, ataxia_server, add, [DB, Value]).
-
--spec reserve (atom()) -> ({'ok', ataxia_id:type()} | ataxia_error:type()).
-reserve (Client, DB, ReadPerm, WritePerm, Lock) ->
-	DBNode = get_random_db_node(),
-	rpc:call(DBNode, ataxia_server, reserve, [DB]).
-
--spec reserve_at (atom(), ataxia_id:type()) -> ('ok' | ataxia_error:type()).
-reserve_at (Client, DB, ID) ->
-	DBNode = get_db_node_for(ID),
-	rpc:call(DBNode, ataxia_server, reserve_at, [DB, ID]).
+-spec add
+	(
+		type(),
+		atom(),
+		ataxia_lock:message(),
+		any()
+	)
+	->
+	{
+		type(),
+		(
+			{'ok', ataxia_id:type()}
+			| {'ok', ataxia_lock_janitor:lock_reference(), ataxia_id:type()}
+			| ataxia_error:type()
+		)
+	}.
+add (Client, DB, Lock, Value) ->
+	request(Client, DB, manager, {add, DB, Lock, Value}).
 
 %%%% BY ID %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% FIXME: these requests on the cache manager are a bottleneck.
 -spec fetch
 	(
+		type(),
 		atom(),
-		ataxia_id:type()
+		ataxia_id:type(),
+		ataxia_lock:message()
 	)
-	-> ({'ok', non_neg_integer(), any()} | ataxia_error:type()).
-fetch (Client, DB, ID) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {fetch, DB, ID}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer(), any()}
+			|
+			{
+				'ok',
+				ataxia_lock_janitor:lock_reference(),
+				non_neg_integer(),
+				any()
+			}
+			| ataxia_error:type()
+		)
+	}.
+fetch (Client, DB, ID, Lock) ->
+	request(Client, DB, ID, {fetch, DB, ID, Lock}).
 
 -spec blind_update
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type()
 	)
-	-> ('ok' | ataxia_error:type()).
-blind_update (Client, DB, ID, Op) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_update, DB, ID}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer()}
+			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| ataxia_error:type()
+		)
+	}.
+blind_update (Client, DB, ID, Lock, Op) ->
+	request(Client, DB, ID, {blind_update, DB, ID, Lock, Op}).
 
 -spec safe_update
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation(),
+		ataxia_lock:message(),
+		ataxic:type(),
 		non_neg_integer(),
 		any()
 	)
-	-> ({'ok', non_neg_integer()} | ataxia_error:type()).
-safe_update (Client, DB, ID, Op, ExpectedCurrentVersion, ExpectedNewValue) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {safe_update, DB, ID, Op, ExpectedCurrentVersion, ExpectedNewValue}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer()}
+			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| ataxia_error:type()
+		)
+	}.
+safe_update
+(
+	Client,
+	DB,
+	ID,
+	Lock,
+	Op,
+	ExpectedCurrentVersion,
+	ExpectedNewValue
+) ->
+	request
+	(
+		Client,
+		DB,
+		ID,
+		{safe_update, DB, ID, Lock, Op, ExpectedCurrentVersion, ExpectedNewValue}
+	).
 
 -spec blind_update_then_fetch
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type()
 	)
-	-> ({'ok', non_neg_integer(), any()} | ataxia_error:type()).
-blind_update_then_fetch (Client, DB, ID, OP) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_update_then_fetch, DB, ID, Op}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer(), any()}
+			|
+			{
+				'ok',
+				ataxia_lock_janitor:lock_reference(),
+				non_neg_integer(),
+				any()
+			}
+			| ataxia_error:type()
+		)
+	}.
+blind_update_then_fetch (Client, DB, ID, Lock, Op) ->
+	request
+	(
+		Client,
+		DB,
+		ID,
+		{blind_update_then_fetch, DB, ID, Lock, Op}
+	).
 
--spec blind_remove (atom(), ataxia_id:type()) -> ('ok' | ataxia_error:type()).
-blind_remove (Client, DB, ID) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_remove, DB, ID}).
+-spec blind_remove
+	(
+		type(),
+		atom(),
+		ataxia_lock:message(),
+		ataxia_id:type()
+	) -> {type(), ('ok' | ataxia_error:type())}.
+blind_remove (Client, DB, ID, Lock) ->
+	request(Client, DB, ID, {blind_remove, DB, ID, Lock}).
 
 -spec safe_remove
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
+		ataxia_lock:message(),
 		non_neg_integer()
 	)
-	-> ('ok' | ataxia_error:type()).
-safe_remove (Client, DB, ID, ExpectedCurrentVersion) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {safe_remove, DB, ID, ExpectedCurrentVersion}).
+	-> {type(), ('ok' | ataxia_error:type())}.
+safe_remove (Client, DB, ID, Lock, ExpectedCurrentVersion) ->
+	request(Client, DB, ID, {safe_remove, DB, ID, Lock, ExpectedCurrentVersion}).
 
 %%%% BY ID AND CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec fetch_if
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type()
 	)
-	-> ({'ok', non_neg_integer(), any()} | ataxia_error:type()).
-fetch_if (Client, DB, ID, Cond) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {fetch_if, DB, ID, Cond}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer(), any()}
+			|
+			{
+				'ok',
+				ataxia_lock_janitor:lock_reference(),
+				non_neg_integer(),
+				any()
+			}
+			| ataxia_error:type()
+		)
+	}.
+fetch_if (Client, DB, ID, Lock, Cond) ->
+	request(Client, DB, ID, {fetch_if, DB, ID, Lock, Cond}).
 
 -spec blind_update_if
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type(),
+		ataxic:type()
 	)
-	-> ('ok' | ataxia_error:type()).
-blind_update_if (Client, DB, ID, Cond, Op) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_update_if, DB, ID, Cond, Op}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer()}
+			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| ataxia_error:type()
+		)
+	}.
+blind_update_if (Client, DB, ID, Lock, Cond, Op) ->
+	request(Client, DB, ID, {blind_update_if, DB, ID, Lock, Cond, Op}).
 
 -spec blind_update_if_then_fetch
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type(),
+		ataxic:type()
 	)
-	-> ({'ok', non_neg_integer(), any()} | ataxia_error:type()).
-blind_update_if_then_fetch (Client, DB, ID, Cond, Op) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_update_if_then_fetch, DB, ID, Cond, Op}).
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer(), any()}
+			|
+			{
+				'ok',
+				ataxia_lock_janitor:lock_reference(),
+				non_neg_integer(),
+				any()
+			}
+			| ataxia_error:type()
+		)
+	}.
+blind_update_if_then_fetch (Client, DB, ID, Lock, Cond, Op) ->
+	request
+	(
+		Client,
+		DB,
+		ID,
+		{blind_update_if_then_fetch, DB, ID, Lock, Cond, Op}
+	).
 
 -spec blind_update_if_else_fetch
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type(),
+		ataxic:type()
 	)
 	->
+	{
+		type(),
+		(
+			{
+				'ok',
+				'updated',
+				ataxia_lock_janitor:lock_reference(),
+				non_neg_integer()
+			}
+			| {'ok', 'updated', non_neg_integer()}
+			| {'ok', 'fetch', non_neg_integer(), any()}
+			|
+			{
+				'ok',
+				'fetch',
+				ataxia_lock_janitor:lock_reference(),
+				non_neg_integer(),
+				any()
+			}
+			| ataxia_error:type()
+		)
+	}.
+blind_update_if_else_fetch (Client, DB, ID, Lock, Cond, Op) ->
+	request
 	(
-		{'ok', non_neg_integer()}
-		| {'ok', non_neg_integer(), any()}
-		| ataxia_error:type()
+		Client,
+		DB,
+		ID,
+		{blind_update_if_else_fetch, DB, ID, Lock, Cond, Op}
 	).
-blind_update_if_else_fetch (Client, DB, ID, Cond, Op) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_update_if_else_fetch, DB, ID, Cond, Op}).
 
 -spec blind_remove_if
 	(
+		type(),
 		atom(),
 		ataxia_id:type(),
-		ataxic:operation()
+		ataxia_lock:message(),
+		ataxic:type()
 	)
-	-> ('ok' | ataxia_error:type()).
-blind_remove_if (Client, DB, ID, Cond) ->
-	CacheEntry = ataxia_cache_manager:request_cache_entry(Client, DB, ID),
-	ataxia_cache_entry:request(Client, DB, ID, {blind_remove_if, DB, ID, Cond}).
+	-> {type(), ('ok' | ataxia_error:type())}.
+blind_remove_if (Client, DB, ID, Lock, Cond) ->
+	request(Client, DB, ID, {blind_remove_if, DB, ID, Lock, Cond}).
 
 %%%% ONE, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec fetch_any
-	(
-		atom(),
-		ataxic:operation()
-	)
-	-> ({'ok', ataxia_id:type(), non_neg_integer(), any()} | ataxia_error:type()).
-fetch_any (Client, DB, Condition) ->
-	% TODO: Try all nodes one by one until one is found.
-	unimplemented.
-
--spec blind_update_any
-	(
-		atom(),
-		ataxic:operation(),
-		ataxic:operation()
-	)
-	-> ({'ok', ataxia_id:type()} | ataxia_error:type()).
-update_any (Client, DB, Condition, Op) ->
-	% TODO: Try all nodes one by one until one is found.
-	unimplemented.
-
--spec blind_update_then_fetch_any
-	(
-		atom(),
-		ataxic:operation(),
-		ataxic:operation()
-	)
-	->
-	(
-		{'ok', ataxia_id:type(), non_neg_integer(), any()}
-		| ataxia_error:type()
-	).
-blind_update_then_fetch_any (Client, DB, Condition, Op) ->
-	% TODO: Try all nodes one by one until one is found.
-	unimplemented.
-
--spec blind_remove_any
-	(
-		atom(),
-		ataxic:operation()
-	)
-	-> ({'ok', ataxia_id:type()} | ataxia_error:type()).
-remove_any (Client, DB, Condition) ->
-	% TODO: Try all nodes one by one until one is found.
-	unimplemented.
-
-%%%% ALL, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec fetch_all
-	(
-		atom(),
-		ataxic:operation()
-	)
-	-> ({'ok', list({ataxia_id:type(), non_neg_integer(), any()})}).
-fetch_all (Client, DB, Condition) ->
-	% TODO: Try all nodes one by one, get all matching entries.
-	unimplemented.
-
--spec blind_update_all
-	(
-		atom(),
-		ataxic:operation(),
-		ataxic:operation()
-	)
-	-> {'ok', list(ataxia_id:type())}.
-update_all (Client, DB, Condition, Op) ->
-	% TODO: Try all nodes one by one, apply to all the matching entries.
-	unimplemented.
-
--spec blind_update_then_fetch_all
-	(
-		atom(),
-		ataxic:operation(),
-		ataxic:operation()
-	)
-	-> {'ok', list({ataxia_id:type(), non_neg_integer(), any()})}.
-blind_update_then_fetch_all (Client, DB, Condition, Op) ->
-	% TODO: Try all nodes one by one, apply to all the matching entries.
-	unimplemented.
-
--spec blind_remove_all
-	(
-		atom(),
-		ataxic:operation()
-	)
-	-> {'ok'}.
-blind_remove_all (Client, DB, Condition) ->
-	% TODO: Try all nodes one by one, apply to all the matching entries.
-	unimplemented.
+%-spec fetch_any
+%	(
+%		atom(),
+%		ataxic:type()
+%	)
+%	-> ({'ok', ataxia_id:type(), non_neg_integer(), any()} | ataxia_error:type()).
+%fetch_any (Client, DB, Condition) ->
+%	% TODO: Try all nodes one by one until one is found.
+%	unimplemented.
+%
+%-spec blind_update_any
+%	(
+%		atom(),
+%		ataxic:type(),
+%		ataxic:type()
+%	)
+%	-> ({'ok', ataxia_id:type()} | ataxia_error:type()).
+%update_any (Client, DB, Condition, Op) ->
+%	% TODO: Try all nodes one by one until one is found.
+%	unimplemented.
+%
+%-spec blind_update_then_fetch_any
+%	(
+%		atom(),
+%		ataxic:type(),
+%		ataxic:type()
+%	)
+%	->
+%	(
+%		{'ok', ataxia_id:type(), non_neg_integer(), any()}
+%		| ataxia_error:type()
+%	).
+%blind_update_then_fetch_any (Client, DB, Condition, Op) ->
+%	% TODO: Try all nodes one by one until one is found.
+%	unimplemented.
+%
+%-spec blind_remove_any
+%	(
+%		atom(),
+%		ataxic:type()
+%	)
+%	-> ({'ok', ataxia_id:type()} | ataxia_error:type()).
+%remove_any (Client, DB, Condition) ->
+%	% TODO: Try all nodes one by one until one is found.
+%	unimplemented.
+%
+%%%%% ALL, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%-spec fetch_all
+%	(
+%		atom(),
+%		ataxic:type()
+%	)
+%	-> ({'ok', list({ataxia_id:type(), non_neg_integer(), any()})}).
+%fetch_all (Client, DB, Condition) ->
+%	% TODO: Try all nodes one by one, get all matching entries.
+%	unimplemented.
+%
+%-spec blind_update_all
+%	(
+%		atom(),
+%		ataxic:type(),
+%		ataxic:type()
+%	)
+%	-> {'ok', list(ataxia_id:type())}.
+%update_all (Client, DB, Condition, Op) ->
+%	% TODO: Try all nodes one by one, apply to all the matching entries.
+%	unimplemented.
+%
+%-spec blind_update_then_fetch_all
+%	(
+%		atom(),
+%		ataxic:type(),
+%		ataxic:type()
+%	)
+%	-> {'ok', list({ataxia_id:type(), non_neg_integer(), any()})}.
+%blind_update_then_fetch_all (Client, DB, Condition, Op) ->
+%	% TODO: Try all nodes one by one, apply to all the matching entries.
+%	unimplemented.
+%
+%-spec blind_remove_all
+%	(
+%		atom(),
+%		ataxic:type()
+%	)
+%	-> {'ok'}.
+%blind_remove_all (Client, DB, Condition) ->
+%	% TODO: Try all nodes one by one, apply to all the matching entries.
+%	unimplemented.

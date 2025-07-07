@@ -17,6 +17,8 @@
 
 -type holder() :: #holder{}.
 
+-type message() :: holder() | category() | {'temp', category()}.
+
 -record
 (
 	request,
@@ -49,7 +51,8 @@
 (
 	[
 		type/0,
-		category/0
+		category/0,
+		message/0,
 	]
 ).
 
