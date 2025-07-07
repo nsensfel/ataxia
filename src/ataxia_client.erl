@@ -10,7 +10,7 @@
 	client,
 	{
 		known_cache_entries :: dict:dict({node(), pid()}, pid()),
-		cache_entry_managers :: dict:dict(non_neg_integer(), pid()),
+		cache_managers :: ataxia_cache_manager:collection(),
 		next_request_id :: non_neg_integer()
 	}
 ).
@@ -98,11 +98,10 @@ await_reply (Client, DB, ID, Request, EntryPID, RequestID) ->
 )
 -> {type(), any()}.
 request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
-	ManagerPID = ataxia_cache_manager:get_pid_for(Client, DB, ID),
 	NewEntryPID =
 		ataxia_cache_manager:request_entry_for
 		(
-			ManagerPID,
+			Client#client.cache_managers,
 			DB,
 			ID,
 			EntryPID
@@ -141,7 +140,7 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 )
 -> {type(), any()}.
 request (Client, DB, ID, Request) ->
-	case dict:find(Client#client.known_cache_entries, {DB, ID}) of
+	case dict:find({DB, ID}, Client#client.known_cache_entries) of
 		{ok, EntryPID} ->
 			ataxia_cache_entry:request(EntryPID, Request),
 			case is_process_alive(EntryPID) of
@@ -163,9 +162,15 @@ request (Client, DB, ID, Request) ->
 	-> (pid() | 'none').
 merge_cache_entry_dicts (_Client, _DB, _ID, A, B) when A == B -> A;
 merge_cache_entry_dicts (Client, DB, ID, _A, _B) ->
-	ManagerKey = ataxia_cache_manager:get_key_for(DB, ID),
-	ManagerPID = dict:fetch(ManagerKey, Client#client.cache_entry_managers),
-	ataxia_cache_manager:peek_entry_for(ManagerPID, DB, ID).
+	ataxia_cache_manager:peek_entry_for(Client#client.cache_managers, DB, ID).
+
+-spec remove_cache_entry ({atom(), ataxia_id:type()}, type()) -> type().
+remove_cache_entry (Key, Client) ->
+	Client#client
+	{
+		known_cache_entries =
+			dict:remove(Key, Client#client.known_cache_entries)
+	}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -175,7 +180,7 @@ new () ->
 	#client
 	{
 		known_cache_entries = dict:new(),
-		cache_entry_managers = ataxia_cache_manager:get_cache_entry_managers()
+		cache_managers = ataxia_cache_manager:get_collection()
 	}.
 
 -spec merge (type(), type()) -> type().
@@ -365,7 +370,12 @@ blind_update_then_fetch (Client, DB, ID, Lock, Op) ->
 		ataxia_id:type()
 	) -> {type(), ('ok' | ataxia_error:type())}.
 blind_remove (Client, DB, ID, Lock) ->
-	request(Client, DB, ID, {blind_remove, DB, ID, Lock}).
+	{NewClient, Reply} =
+		request(Client, DB, ID, {blind_remove, DB, ID, Lock}),
+	{
+		remove_cache_entry({DB, ID}, NewClient),
+		Reply
+	}.
 
 -spec safe_remove
 	(
@@ -377,7 +387,19 @@ blind_remove (Client, DB, ID, Lock) ->
 	)
 	-> {type(), ('ok' | ataxia_error:type())}.
 safe_remove (Client, DB, ID, Lock, ExpectedCurrentVersion) ->
-	request(Client, DB, ID, {safe_remove, DB, ID, Lock, ExpectedCurrentVersion}).
+	{NewClient, Reply} =
+		request
+		(
+			Client,
+			DB,
+			ID,
+			{safe_remove, DB, ID, Lock, ExpectedCurrentVersion}
+		),
+
+	{
+		remove_cache_entry({DB, ID}, NewClient),
+		Reply
+	}.
 
 %%%% BY ID AND CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec fetch_if
@@ -511,7 +533,13 @@ blind_update_if_else_fetch (Client, DB, ID, Lock, Cond, Op) ->
 	)
 	-> {type(), ('ok' | ataxia_error:type())}.
 blind_remove_if (Client, DB, ID, Lock, Cond) ->
-	request(Client, DB, ID, {blind_remove_if, DB, ID, Lock, Cond}).
+	{NewClient, Reply} =
+		request(Client, DB, ID, {blind_remove_if, DB, ID, Lock, Cond}),
+
+	{
+		remove_cache_entry({DB, ID}, NewClient),
+		Reply
+	}.
 
 %%%% ONE, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %-spec fetch_any
@@ -560,7 +588,7 @@ blind_remove_if (Client, DB, ID, Lock, Cond) ->
 %	% TODO: Try all nodes one by one until one is found.
 %	unimplemented.
 %
-%%%%% ALL, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% ALL, BY CONDITION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %-spec fetch_all
 %	(
 %		atom(),

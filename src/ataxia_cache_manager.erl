@@ -12,6 +12,7 @@
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -type state() :: dict:dict({atom(), ataxia_id:type()}, pid()).
+-type collection() :: array:array(atom()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -33,22 +34,27 @@
 -export
 (
 	[
-		request_cache_entry/2,
-		start/0
+		request_entry_for/4,
+		peek_entry_for/3,
+		start/1,
+		start_collection/0,
+		get_collection/0
 	]
 ).
+
+-export_type([collection/0]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% FIXME: tie cache entries to manager, so it gets notified of termination.
 %%%% FIXME: multiple cache managers according to ID modulo?
--spec request_cache_entry (atom(), ataxia_id:type(), state()) ->
+-spec request_entry (atom(), ataxia_id:type(), state()) ->
 	{
 		pid(),
 		state()
 	}.
-request_cache_entry (DB, ID, State) ->
+request_entry (DB, ID, State) ->
 	case dict:find({DB, ID}, State) of
 		{ok, Result} -> {Result, State};
 		error ->
@@ -56,6 +62,20 @@ request_cache_entry (DB, ID, State) ->
 			NewState = dict:store({DB, ID}, Result, State),
 			{Result, NewState}
 	end.
+
+-spec generate_atom_from_index (non_neg_integer()) -> atom().
+generate_atom_from_index (IX) ->
+	list_to_atom
+	(
+		lists:flatten
+		(
+			io_lib:format
+			(
+				"ataxia_cache_manager_~p",
+				[IX]
+			)
+		)
+	).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -65,13 +85,27 @@ request_cache_entry (DB, ID, State) ->
 %%%% 'gen_server' functions
 init (_) -> {ok, dict:new()}.
 
-handle_call ({request_cache_entry, DB, ID}, _From, State) ->
-	{PID, NewState} = request_cache_entry(DB, ID, State),
-	{reply, PID, NewState}.
+handle_call ({request_entry, DB, ID, none}, _From, State) ->
+	{PID, NewState} = request_entry(DB, ID, State),
+	{reply, PID, NewState};
+handle_call ({request_entry, DB, ID, CurrentPID}, _From, State) ->
+	{PID, NewState} =
+		case dict:find({DB, ID}, State) of
+			{ok, OtherValue} when OtherValue /= CurrentPID -> {OtherValue, State};
+			_ -> request_entry(DB, ID, dict:erase({DB, ID}, State))
+		end,
 
-handle_cast ({request_cache_entry, DB, ID}, State) ->
-	{PID, NewState} = request_cache_entry(DB, ID, State),
-	{reply, PID, NewState}.
+	{reply, PID, NewState};
+handle_call ({peek_entry, DB, ID}, _From, State) ->
+	PID =
+		case dict:find({DB, ID}, State) of
+			{ok, Value} -> Value;
+			_ -> none
+		end,
+
+	{reply, PID, State}.
+
+handle_cast (_Msg, State) -> {noreply, State}.
 
 terminate (_, _) -> ok.
 
@@ -85,18 +119,58 @@ handle_info({'EXIT', _From, {none, {DB, ID, _PID}}}, State) ->
 	{noreply, dict:erase({DB, ID}, State)}.
 
 %%%% Interface Functions
--spec request_cache_entry (atom(), ataxia_id:type()) -> pid().
-request_cache_entry (DB, ID) ->
-	IX = ataxia_id:mod(ID, ?MANAGER_COUNT),
-	gen_server:call
+-spec request_entry_for
 	(
-		{global, {ataxia_cache_manager, IX}},
-		{request_cache_entry, DB, ID}
-	).
+		collection(),
+		atom(),
+		ataxia_id:type(),
+		(pid() | 'none')
+	)
+	-> pid().
+request_entry_for (Collection, DB, ID, CurrentPID) ->
+	ManagerAtom = array:get(ataxia_id:mod(ID, ?MANAGER_COUNT), Collection),
+	gen_server:call(ManagerAtom, {request_entry, DB, ID, CurrentPID}).
 
 -spec start (non_neg_integer()) -> 'ok'.
 start (IX) ->
 	{ok, _} =
-		gen_server:start({global, {ataxia_cache_manager, IX}}, ?MODULE, none, []),
+		gen_server:start
+		(
+			generate_atom_from_index(IX),
+			?MODULE,
+			none,
+			[]
+		),
 
 	ok.
+
+-spec start_collection () -> 'ok'.
+start_collection () ->
+	lists:map
+	(
+		fun start/1,
+		lists:seq(0, ?MANAGER_COUNT - 1)
+	),
+	ok.
+
+-spec peek_entry_for
+	(
+		collection(),
+		atom(),
+		ataxia_id:type()
+	)
+	-> (pid() | 'none').
+peek_entry_for (Collection, DB, ID) ->
+	ManagerAtom = array:get(ataxia_id:mod(ID, ?MANAGER_COUNT), Collection),
+	gen_server:call(ManagerAtom, {peek_entry, DB, ID}).
+
+-spec get_collection () -> collection().
+get_collection () ->
+	array:from_list
+	(
+		lists:map
+		(
+			fun generate_atom_from_index/1,
+			lists:seq(0, ?MANAGER_COUNT - 1)
+		)
+	).
