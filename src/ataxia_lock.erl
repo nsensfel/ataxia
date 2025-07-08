@@ -249,19 +249,18 @@ handle_info(_, State) ->
 new () ->
 	gen_server:start_link(?MODULE, [], []).
 
-has_lock (ClientNode, ClientPID, Mode, LockPID) ->
-	gen_server:call
-	(
-		LockPID,
-		{has_lock, Mode, #holder{ node = ClientNode, pid = ClientPID } }
-	).
+-spec has_lock (pid(), holder(), category()).
+has_lock (LockPID, Client, Mode) ->
+	gen_server:call(LockPID, {has_lock, Mode, Client}).
 
 request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
 	{ok, LockPID} = gen_server:call(ataxia_lock_manager, get_lock, [DB, ID]),
 	gen_server:cast(LockPID, {Mode, self(), ClientNode, ClientPID}),
 	receive
-		granted -> {node(), LockPID}
+		{ataxia_reply, lock, granted} -> #holder{ node = node(), pid = LockPID }
 	end.
 
-release_lock (UserNode, UserPID, LockPid) ->
-	gen_server:cast(LockPID, {unlocked, ClientNode, ClientPID}).
+-spec release_lock (pid(), holder()) -> 'ok'.
+release_lock (LockPid, Client) ->
+	gen_server:cast(LockPID, {unlocked, Client}),
+	ok.

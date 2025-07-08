@@ -82,7 +82,7 @@
    ]
 ).
 
--export([apply_basic_to/2, apply_to/2, matches/2]).
+-export([apply_to/2, matches/2]).
 
 -export([is_constant/1]).
 
@@ -226,19 +226,9 @@ sequence_meta (List) -> #mseq{ ops = List }.
 update_value (OP) -> #value{ op = OP }.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec apply_to (meta(), ataxia_entry:type()) -> ataxia_entry:type().
-apply_to (#value{ op = OP }, Entry) ->
-   ataxia_entry:set_value
-   (
-      apply_basic_to(OP, ataxia_entry:get_value(Entry)),
-      Entry
-   );
-apply_to (#mseq { ops = List }, Entry) ->
-   lists:foldl(fun apply_to/2, Entry, List).
-
--spec apply_basic_to (type(), any()) -> any().
-apply_basic_to (OP, Val) ->
-   apply_basic_to(OP, Val, dict:new()).
+-spec apply_to (type(), any()) -> any().
+apply_to (OP, Val) ->
+   apply_to(OP, Val, dict:new()).
 
 -spec matches (type(), ataxia_entry:type()) -> boolean().
 matches (OP, Entry) ->

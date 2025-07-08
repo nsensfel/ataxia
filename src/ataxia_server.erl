@@ -9,686 +9,367 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -export
 (
-   [
-      add_at/6,
-      add/5,
-      reserve/4,
-      reserve_at/5,
-
-      fetch/3,
-      update/4,
-      update_and_fetch/4,
-      remove/3,
-
-      fetch_if/4,
-      update_if/5,
-      update_and_fetch_if/5,
-      remove_if/4,
-
-      fetch_any/3,
-      update_any/4,
-      update_and_fetch_any/4,
-      remove_any/3,
-
-      fetch_all/3,
-      update_all/4,
-      update_and_fetch_all/4,
-      remove_all/3
-   ]
+	[
+		fetch/5,
+		blind_update/4,
+		safe_update/6,
+		blind_update_then_fetch/4,
+		blind_remove/3,
+		safe_remove/4,
+		fetch_if/4,
+		blind_update_if/5,
+		blind_update_if_then_fetch/5,
+		blind_update_if_else_fetch/5,
+		blind_remove_if/4
+	]
 ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec await_lock_reply (atom(), ataxia_id:type(), any(), pid()) -> any().
+await_lock_reply (DB, ID, Request, LockPID) ->
+	receive
+		{ataxia_reply, lock, Reply} -> Reply;
+	after ?TIMEOUT ->
+		request_new_lock_handler_of(DB, ID, Request, LockPID)
+	end.
 
--spec update_internals
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxia_id:type()
-   )
-   -> {'ok', ataxia_entry:type()}.
-update_internals (DB, User, OP, ID) ->
-   [Entry] = mnesia:read(DB, ID),
+-spec request_new_lock_handler_of
+(
+	atom(),
+	ataxia_id:type(),
+	any(),
+	(pid() | none)
+)
+-> any().
+request_new_lock_handler_of (Client, DB, ID, Request, LockPID) ->
+	NewLockPID = ataxia_lock_manager:request_lock_for(DB, ID, LockPID),
+	ataxia_lock:request(NewLockPID, Request),
+	case is_process_alive(NewLockPID) of
+		true -> await_lock_reply(DB, ID, Request, NewLockPID);
+		_ -> request_new_lock_handler_of(DB, ID, Request, NewLockPID)
+	end.
 
-   true =
-      (
-         ataxia_lock:can_access(User, ataxia_entry:get_lock(Entry))
-         and
-         ataxia_security:can_access
-         (
-            User,
-            ataxia_entry:get_write_permission(Entry)
-         )
-      ),
+-spec request_lock (atom(), ataxia_id:type(), any()) -> any().
+request_lock (DB, ID, Request) ->
+	request_new_lock_handler_of(DB, ID, Request, none).
 
-   UpdatedEntry = ataxic:apply_to(OP, Entry),
+-spec handle_lock_message (ataxia_lock:message()) -> ???
+handle_lock_message (_DB, _ID, unlocked) -> {'error', 'lock'};
+handle_lock_message (DB, ID, read) ->
+	LockPid = request_lock(DB, ID, ),
+		case get_lock_pid(ProcessedLock) of
+			error -> {error, lock};
+			LockPID ->
+				case ataxia_lock:has_lock(LockPID, Client, read, LockPID) of
+					false -> {error, lock};
+					true ->
+						case ataxia_database:read(DB, ID) of
+							error -> {error, id};
+							Entry ->
+								case {Version, ataxia_entry:get_version(Entry)} of
+									{A, B} if A == B -> ok;
+									{_, NewVersion} ->
+										{ok, NewVersion, ataxia_entry:get_value(Entry)}
+								end
+						end
+				end
+		end,
 
-   mnesia:write(DB, UpdatedEntry, sticky_write),
+act_with_lock ({fetch, DB, ID, Version}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, Entry} ->
+			CurrentVersion = ataxia_entry:get_version(Entry),
+			case CurrentVersion == Version of
+				true -> {ok, ok};
+				_ -> {ok, {CurrentVersion, ataxia_entry:get_value(Entry)}}
+			end
+	end;
+act_with_lock ({blind_update, DB, ID, Op}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			S1Entry = ataxia_entry:increase_version(S0Entry),
+			S2Entry =
+				ataxia_entry:set_value
+				(
+					ataxic:apply_to(Op, ataxia_entry:get_value(S1Entry)),
+					S1Entry
+				),
+			ataxia_database:write(DB, ID, S2Entry),
+			{ok, ataxia_entry:get_version(S2Entry)}
+	end;
+act_with_lock ({safe_update, DB, ID, ExpectedVersion, Op}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			case ExpectedVersion == ataxia_entry:get_version(S0Entry) of
+				true ->
+					S1Entry = ataxia_entry:increase_version(S0Entry),
+					S2Entry =
+						ataxia_entry:set_value
+						(
+							ataxic:apply_to(Op, ataxia_entry:get_value(S1Entry)),
+							S1Entry
+						),
+					ataxia_database:write(DB, ID, S2Entry),
+					{ok, ataxia_entry:get_version(S2Entry)}
 
-   {ok, UpdatedEntry}.
+				_ -> {error, version}
+			end
+	end;
+act_with_lock ({blind_update_then_fetch, DB, ID, Op}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			S1Entry = ataxia_entry:increase_version(S0Entry),
+			S2Entry =
+				ataxia_entry:set_value
+				(
+					ataxic:apply_to(Op, ataxia_entry:get_value(S1Entry)),
+					S1Entry
+				),
+			ataxia_database:write(DB, ID, S2Entry),
+			{
+				ok,
+				ataxia_entry:get_version(S2Entry),
+				ataxia_entry:get_value(S2Entry)
+			}
+	end;
+act_with_lock ({blind_remove, DB, ID}) ->
+	case ataxia_database:delete(DB, ID) of
+		error -> {error, id};
+		ok -> {ok, ok}
+	end;
+act_with_lock ({safe_remove, DB, ID, ExpectedVersion}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			case ExpectedVersion == ataxia_entry:get_version(S0Entry) of
+				true ->
+					case ataxia_database:delete(DB, ID) of
+						error -> {error, id};
+						ok -> {ok, ok}
+					end;
 
--spec update_if_internals
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ({'ok', ataxia_entry:type()} | no_match).
-update_if_internals (DB, User, OP, ID, Cond) ->
-   [Entry] = mnesia:read(DB, ID),
+				_ -> {error, version}
+			end
+	end;
+act_with_lock ({fetch_if, DB, ID, Version, Cond}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, Entry} ->
+			CurrentVersion = ataxia_entry:get_version(Entry),
+			case
+				{
+					ataxic:apply_to(Cond, ataxia_entry:get_value(Entry)),
+					CurrentVersion == Version
+				}
+			of
+				{true, true} -> {ok, ok};
+				{true, false} ->
+					{ok, {CurrentVersion, ataxia_entry:get_value(Entry)}};
 
-   true =
-      (
-         ataxia_lock:can_access(User, ataxia_entry:get_lock(Entry))
-         and
-         ataxia_security:can_access
-         (
-            User,
-            ataxia_entry:get_write_permission(Entry)
-         )
-      ),
+				_ -> {error, condition}
+			end
+	end;
+act_with_lock ({blind_update_if, DB, ID, Cond, Op}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			case ataxic:apply_to(Cond, ataxia_entry:get_value(S0Entry)) of
+				true ->
+					S1Entry = ataxia_entry:increase_version(S0Entry),
+					S2Entry =
+						ataxia_entry:set_value
+						(
+							ataxic:apply_to(Op, ataxia_entry:get_value(S1Entry)),
+							S1Entry
+						),
+					ataxia_database:write(DB, ID, S2Entry),
+					{ok, ataxia_entry:get_version(S2Entry)};
 
-   case ataxic:matches(Cond, Entry) of
-      true ->
-         UpdatedEntry = ataxic:apply_to(OP, Entry),
-         mnesia:write(DB, UpdatedEntry, sticky_write),
-         {ok, UpdatedEntry};
+				_ -> {error, condition}
+			end
+	end;
+act_with_lock ({blind_update_if_then_fetch, DB, ID, Cond, Op}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			case ataxic:apply_to(Cond, ataxia_entry:get_value(S0Entry)) of
+				true ->
+					S1Entry = ataxia_entry:increase_version(S0Entry),
+					S2Entry =
+						ataxia_entry:set_value
+						(
+							ataxic:apply_to(Op, ataxia_entry:get_value(S1Entry)),
+							S1Entry
+						),
+					ataxia_database:write(DB, ID, S2Entry),
+					{
+						ok,
+						{
+							ataxia_entry:get_version(S2Entry),
+							ataxia_entry:get_value(S2Entry)
+						}
+					};
 
-      _ -> no_match
-   end.
+				_ -> {error, condition}
+			end
+	end;
+act_with_lock ({blind_update_if_else_fetch, DB, ID, Cond, Op}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, S0Entry} ->
+			case ataxic:apply_to(Cond, ataxia_entry:get_value(S0Entry)) of
+				true ->
+					S1Entry = ataxia_entry:increase_version(S0Entry),
+					S2Entry =
+						ataxia_entry:set_value
+						(
+							ataxic:apply_to(Op, ataxia_entry:get_value(S1Entry)),
+							S1Entry
+						),
+					ataxia_database:write(DB, ID, S2Entry),
+					{ok, {ok, updated, ataxia_entry:get_version(S2Entry)}};
 
--spec remove_internals
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type()
-   )
-   -> 'ok'.
-remove_internals (DB, User, ID) ->
-   [Entry] = mnesia:read(DB, ID),
+				_ ->
+					{
+						ok,
+						{
+							ok,
+							fetched,
+							ataxia_entry:get_version(S0Entry),
+							ataxia_entry:get_value(S0Entry)
+						}
+					}
+			end
+	end;
+act_with_lock ({blind_remove_if, DB, ID, Cond}) ->
+	case ataxia_database:read(DB, ID) of
+		error -> {error, id};
+		{ok, Entry} ->
+			case ataxic:apply_to(Cond, ataxia_entry:get_value(Entry)) of
+				true ->
+					case ataxia_database:delete(DB, ID) of
+						error -> {error, id};
+						ok -> {ok, ok}
+					end;
 
-   true =
-      (
-         ataxia_lock:can_access(User, ataxia_entry:get_lock(Entry))
-         and
-         ataxia_security:can_access
-         (
-            User,
-            ataxia_entry:get_write_permission(Entry)
-         )
-      ),
+				_ -> {error, condition}
+			end
+	end.
 
-   mnesia:delete(DB, ID, sticky_write),
-   ataxia_id_manager:free(ID, DB),
-
-   ok.
-
--spec remove_if_internals
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ('ok' | 'no_match').
-remove_if_internals (DB, User, ID, Cond) ->
-   [Entry] = mnesia:read(DB, ID),
-
-   true =
-      (
-         ataxia_lock:can_access(User, ataxia_entry:get_lock(Entry))
-         and
-         ataxia_security:can_access
-         (
-            User,
-            ataxia_entry:get_write_permission(Entry)
-         )
-      ),
-
-   case ataxic:matches(Cond, Entry) of
-      true ->
-         mnesia:delete(DB, ID, sticky_write),
-         ataxia_id_manager:free(ID, DB),
-         ok;
-
-      _ -> no_match
-   end.
-
--spec add_new_item (atom(), ataxia_entry:type()) -> 'ok'.
-add_new_item (DB, Item) ->
-   ID = ataxia_entry:get_id(Item),
-   [] = mnesia:read(DB, ID),
-
-   mnesia:write(DB, Item, sticky_write),
-
-   ok.
-
--spec fetch_if_internals
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', any()}).
-fetch_if_internals (DB, User, ID, Cond) ->
-   case mnesia:read(DB, ID) of
-      [Entry] ->
-         IsAllowed =
-            (
-               ataxia_lock:can_access(User, ataxia_entry:get_lock(Entry))
-               and
-               ataxia_security:can_access
-               (
-                  User,
-                  ataxia_entry:get_read_permission(Entry)
-               )
-            ),
-         case (IsAllowed and ataxic:matches(Cond, Entry)) of
-            true -> {ok, ataxia_entry:get_value(Entry)};
-            _ -> {aborted, no_match}
-         end;
-
-      Other -> Other
-   end.
+-spec perform_with_lock
+(
+	ataxia_lock:holder(),
+	atom(),
+	ataxia_id:type(),
+	ataxia_lock:message(),
+	ataxia_lock:category(),
+	any()
+) -> any().
+perform_with_lock (_Client, _DB, _ID, unlocked, _Perm, _Req) -> {error, lock};
+perform_with_lock (_C, _DB, _ID, {temp, unlocked}, _P, _R) -> {error, lock};
+perform_with_lock (_Client, _DB, _ID, read, write, _Req) -> {error, lock};
+perform_with_lock (_C, _DB, _ID, {temp, read}, write, _Req) -> {error, lock};
+perform_with_lock (Client, DB, ID, read, read, Request) ->
+	LockRequest = {read, self(), Client},
+	{granted, Lock} = request_lock(DB, ID, LockRequest),
+	case act_with_lock(Request) of
+		{ok, Data} -> {ok, Lock, Data};
+		{error, Error} ->
+			ataxia_lock:release_lock(Lock, Client),
+			{error, Error}
+	end;
+perform_with_lock (Client, DB, ID, write, _Permission, Request) ->
+	LockRequest = {write, self(), Client},
+	{granted, Lock} = request_lock(DB, ID, LockRequest),
+	case act_with_lock(Request) of
+		{ok, Data} -> {ok, Lock, Data};
+		{error, Error} ->
+			ataxia_lock:release_lock(Lock, Client),
+			{error, Error}
+	end;
+perform_with_lock (Client, DB, ID, {temp, read}, read, Request) ->
+	LockRequest = {read, self(), Client},
+	{granted, Lock} = request_lock(DB, ID, LockRequest),
+	Output =
+		case act_with_lock(Request) of
+			{ok, Data} -> {ok, Data};
+			{error, Error} -> {error, Error}
+		end,
+	ataxia_lock:release_lock(Lock, Client),
+	Output;
+perform_with_lock (Client, DB, ID, write, _Permission, Request) ->
+	LockRequest = {write, self(), Client},
+	{granted, Lock} = request_lock(DB, ID, LockRequest),
+	Output =
+		case act_with_lock(Request) of
+			{ok, Data} -> {ok, Lock, Data};
+			{error, Error} -> {error, Error}
+		end,
+	ataxia_lock:release_lock(Lock, Client),
+	Output;
+perform_with_lock (Client, _DB, _ID, LockRef, Permission, Request) ->
+	case ataxia_lock:has_lock(LockRef, Client, Permission) of
+		true -> act_with_lock(Request);
+		_ -> {error, lock}
+	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec add_at
-   (
-      atom(),
-      ataxia_security:permission(),
-      ataxia_security:permission(),
-      ataxia_lock:type(),
-      any(),
-      ataxia_id:type()
-   )
-   -> ({'aborted', any()} | 'ok').
-add_at (DB, ReadPerm, WritePerm, Lock, Value, ID) ->
-   Item = ataxia_entry:new(ID, ReadPerm, WritePerm, Lock, Value),
-   case mnesia:sync_transaction(fun add_new_item/2, [DB, Item]) of
-      {atomic, ok} -> ok;
-      {aborted, Val} -> {aborted, Val}
-   end.
-
--spec add
-   (
-      atom(),
-      ataxia_security:permission(),
-      ataxia_security:permission(),
-      ataxia_lock:type(),
-      any()
-   )
-   -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
-add (DB, ReadPerm, WritePerm, Lock, Value) ->
-   ID = ataxia_id_manager:allocate(DB),
-   case add_at(DB, ReadPerm, WritePerm, Lock, Value, ID) of
-      ok -> {ok, ID};
-      {aborted, Val} -> {aborted, Val}
-   end.
-
--spec reserve_at
-   (
-      atom(),
-      ataxia_security:permission(),
-      ataxia_security:permission(),
-      ataxia_lock:type(),
-      ataxia_id:type()
-   )
-   -> ({'aborted', any()} | 'ok').
-reserve_at (DB, ReadPerm, WritePerm, Lock, ID) ->
-   % TODO: spawn or inform janitor
-   add_at
-   (
-      DB,
-      ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
-      ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
-      Lock, % TODO: allow the janitor there.
-      reserved,
-      ID
-   ).
-
--spec reserve
-   (
-      atom(),
-      ataxia_security:permission(),
-      ataxia_security:permission(),
-      ataxia_lock:type()
-   )
-   -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
-reserve (DB, ReadPerm, WritePerm, Lock) ->
-   % TODO: spawn or inform janitor
-   add
-   (
-      DB,
-      ataxia_security:add_access(ataxia_security:janitor(), ReadPerm),
-      ataxia_security:add_access(ataxia_security:janitor(), WritePerm),
-      Lock, % TODO: allow the janitor there.
-      reserved
-   ).
 
 -spec fetch
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type()
-   )
-   -> ({'aborted', any()} | {'ok', any()}).
-fetch (DB, User, ID) ->
-   case mnesia:sync_transaction(fun mnesia:read/2, [DB, ID]) of
-      {atomic, []} -> {aborted, not_found};
-      {atomic, [Entry]} ->
-         IsAllowed =
-            (
-               ataxia_lock:can_access(User, ataxia_entry:get_lock(Entry))
-               and
-               ataxia_security:can_access
-               (
-                  User,
-                  ataxia_entry:get_read_permission(Entry)
-               )
-            ),
-         case IsAllowed of
-            true -> {ok, ataxia_entry:get_value(Entry)};
-            false -> {aborted, permission_denied}
-         end;
+	(
+		ataxia_lock:holder(),
+		atom(),
+		ataxia_id:type(),
+		ataxia_lock:message(),
+		(non_neg_integer() | 'none')
+	)
+	->
+	(
+		'ok'
+		| {'ok', ataxia_lock:message()}
+		| {'ok', non_neg_integer(), any()}
+		| {'ok', ataxia_lock:message(), non_neg_integer(), any()}
+		| ataxia_error:type()
+	).
+fetch (Client, DB, ID, Lock, Version) ->
+	Request = {fetch, DB, ID, Version},
+	Permission = read,
+	perform_with_lock(Client, DB, ID, Lock, Permission, Request).
 
-      Other -> {aborted, Other}
-   end.
+-spec blind_update
+	(
+		ataxia_lock:holder(),
+		atom(),
+		ataxia_id:type(),
+		ataxia_lock:message(),
+		ataxic:type()
+	)
+	->
+	(
+		{'ok', ataxia_lock:holder(), non_neg_integer()}
+		| {'ok', non_neg_integer()}
+		| ataxia_error:type()
+	).
+blind_update (Client, DB, ID, Lock, Op) ->
+	Request = {blind_update, DB, ID, Op},
+	Permission = write,
+	perform_with_lock(Client, DB, ID, Lock, Permission, Request).
 
--spec fetch_if
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', any()}).
-fetch_if (DB, User, ID, Cond) ->
-   case mnesia:sync_transaction(fun fetch_if_internals/4, [DB, User, ID, Cond]) of
-      {atomic, {ok, Value}} -> {ok, Value};
-      Other -> Other
-   end.
+		safe_update/6,
+		blind_update_then_fetch/4,
+		blind_remove/3,
+		safe_remove/4,
+		fetch_if/4,
+		blind_update_if/5,
+		blind_update_if_then_fetch/5,
+		blind_update_if_else_fetch/5,
+		blind_remove_if/4
 
--spec fetch_any
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', any(), ataxia_id:type()}).
-fetch_any (DB, User, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:foldl
-      (
-         fun (Key, Result) ->
-            case Result of
-               {ok, _, _} -> Result;
-               _ ->
-                  case
-                     mnesia:sync_transaction
-                     (
-                        fun fetch_if_internals/4,
-                        [DB, User, Key, Cond]
-                     )
-                  of
-                     {atomic, {ok, Value}} -> {ok, Value, Key};
-                     _ -> Result
-                  end
-            end
-         end,
-         {aborted, no_match},
-         PotentialDBKeys
-      ),
-
-   Result.
-
--spec fetch_all
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', list({any(), ataxia_id:type()})}).
-fetch_all (DB, User, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:filtermap
-      (
-         fun (Key) ->
-            case
-               mnesia:sync_transaction
-               (
-                  fun fetch_if_internals/4,
-                  [DB, User, Key, Cond]
-               )
-            of
-               {atomic, {ok, Value}} -> {true, {Value, Key}};
-               _ -> false
-            end
-         end,
-         PotentialDBKeys
-      ),
-
-   {ok, Result}.
-
--spec update
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxia_id:type()
-   )
-   -> ({'aborted', any()} | 'ok').
-update (DB, User, Update, ID) ->
-   case
-      mnesia:sync_transaction
-      (
-         fun update_internals/4,
-         [DB, User, Update, ID]
-      )
-   of
-      {atomic, {ok, _}} -> ok;
-      Other -> {aborted, Other}
-   end.
-
--spec update_if
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | 'ok').
-update_if (DB, User, Update, ID, Cond) ->
-   case
-      mnesia:sync_transaction
-      (
-         fun update_if_internals/5,
-         [DB, User, Update, ID, Cond]
-      )
-   of
-      {atomic, {ok, _}} -> ok;
-      Other -> Other
-   end.
-
-
--spec update_any
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
-update_any (DB, User, Update, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:foldl
-      (
-         fun (Key, Result) ->
-            case Result of
-               {ok, _} -> Result;
-               _ ->
-                  case
-                     mnesia:sync_transaction
-                     (
-                        fun update_if_internals/5,
-                        [DB, User, Update, Key, Cond]
-                     )
-                  of
-                     {atomic, {ok, _}} -> {ok, Key};
-                     _ -> Result
-                  end
-            end
-         end,
-         {aborted, no_match},
-         PotentialDBKeys
-      ),
-
-   Result.
-
--spec update_all
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', list(ataxia_id:type())}).
-update_all (DB, User, Update, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:filtermap
-      (
-         fun (Key) ->
-            case
-               mnesia:sync_transaction
-               (
-                  fun update_if_internals/5,
-                  [DB, User, Update, Key, Cond]
-               )
-            of
-               {atomic, {ok, _}} -> {true, Key};
-               _ -> false
-            end
-         end,
-         PotentialDBKeys
-      ),
-
-   {ok, Result}.
-
--spec update_and_fetch
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxia_id:type()
-   )
-   -> ({'aborted', any()} | {'ok', any()}).
-update_and_fetch (DB, User, Update, ID) ->
-   case
-      mnesia:sync_transaction
-      (
-         fun update_internals/4,
-         [DB, User, Update, ID]
-      )
-   of
-      {atomic, {ok, Entry}} -> {ok, ataxia_entry:get_value(Entry)};
-      Other -> {aborted, Other}
-   end.
-
--spec update_and_fetch_if
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', any()}).
-update_and_fetch_if (DB, User, Update, ID, Cond) ->
-   case
-      mnesia:sync_transaction
-      (
-         fun update_if_internals/5,
-         [DB, User, Update, ID, Cond]
-      )
-   of
-      {atomic, {ok, Entry}} ->
-         {ok, ataxia_entry:get_value(Entry)};
-
-      Other -> Other
-   end.
-
--spec update_and_fetch_any
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', any(), ataxia_id:type()}).
-update_and_fetch_any (DB, User, Update, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:foldl
-      (
-         fun (Key, Result) ->
-            case Result of
-               {ok, _} -> Result;
-               _ ->
-                  case
-                     mnesia:sync_transaction
-                     (
-                        fun update_if_internals/5,
-                        [DB, User, Update, Key, Cond]
-                     )
-                  of
-                     {atomic, {ok, Entry}} ->
-                        {ok, ataxia_entry:get_value(Entry), Key};
-
-                     _ -> Result
-                  end
-            end
-         end,
-         {aborted, no_match},
-         PotentialDBKeys
-      ),
-
-   Result.
-
--spec update_and_fetch_all
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:meta(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', list({any(), ataxia_id:type()})}).
-update_and_fetch_all (DB, User, Update, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:filtermap
-      (
-         fun (Key) ->
-            case
-               mnesia:sync_transaction
-               (
-                  fun update_if_internals/5,
-                  [DB, User, Update, Key, Cond]
-               )
-            of
-               {atomic, {ok, Entry}} ->
-                  {true, {ataxia_entry:get_value(Entry), Key}};
-
-               _ -> false
-            end
-         end,
-         PotentialDBKeys
-      ),
-
-   {ok, Result}.
-
--spec remove
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type()
-   )
-   -> ({'aborted', any()} | 'ok').
-remove (DB, User, ID) ->
-   case mnesia:sync_transaction(fun remove_internals/3, [DB, User, ID]) of
-      {atomic, ok} -> ok;
-      Other -> {aborted, Other}
-   end.
-
--spec remove_if
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxia_id:type(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | 'ok').
-remove_if (DB, User, ID, Cond) ->
-   case
-      mnesia:sync_transaction
-      (
-         fun remove_if_internals/4,
-         [DB, User, ID, Cond]
-      )
-   of
-      {atomic, ok} -> ok;
-      Other -> Other
-   end.
-
--spec remove_any
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', ataxia_id:type()}).
-remove_any (DB, User, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:foldl
-      (
-         fun (Key, Result) ->
-            case Result of
-               {ok, _} -> Result;
-               _ ->
-                  case
-                     mnesia:sync_transaction
-                     (
-                        fun remove_if_internals/4,
-                        [DB, User, Key, Cond]
-                     )
-                  of
-                     {atomic, ok} -> {ok, Key};
-                     _ -> Result
-                  end
-            end
-         end,
-         {aborted, no_match},
-         PotentialDBKeys
-      ),
-
-   Result.
-
--spec remove_all
-   (
-      atom(),
-      ataxia_security:user(),
-      ataxic:basic()
-   )
-   -> ({'aborted', any()} | {'ok', list(ataxia_id:type())}).
-remove_all (DB, User, Cond) ->
-   PotentialDBKeys = mnesia:dirty_all_keys(DB),
-   Result =
-      lists:filtermap
-      (
-         fun (Key) ->
-            case
-               mnesia:sync_transaction
-               (
-                  fun remove_if_internals/4,
-                  [DB, User, Key, Cond]
-               )
-            of
-               {atomic, ok} -> {true, Key};
-               _ -> false
-            end
-         end,
-         PotentialDBKeys
-      ),
-
-   {ok, Result}.

@@ -245,7 +245,7 @@ add_at (Client, DB, ID, Lock, Value) ->
 		)
 	}.
 add (Client, DB, Lock, Value) ->
-	request(Client, DB, manager, {add, DB, Lock, Value}).
+	request(Client, DB, ataxia_id:table_manager(), {add, DB, Lock, Value}).
 
 %%%% BY ID %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec fetch

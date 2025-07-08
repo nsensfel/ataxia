@@ -70,6 +70,43 @@ init (_) -> {ok, none}.
 % TODO: only use casts.
 handle_cast
 (
+	{request, ReplyTo, RequestID, {add, DB, Lock, Value}},
+	_State
+) ->
+	case
+		ataxia_network:call
+		(
+			DB,
+			ataxia_id:table_manager(),
+			ataxia_server,
+			add,
+			[DB, Lock, Value])
+	of
+		{ok, ID} -> {noreply, State};
+		{ok, ID, NewLock} -> {noreply, State};
+		Error -> {error, Error}
+	end
+	{stop, none, {DB, ID, self()}};
+handle_cast
+(
+	{request, ReplyTo, RequestID, {add_at, DB, ID, Lock, Value}},
+	_State
+) ->
+	case
+		ataxia_network:call
+		(
+			DB,
+			ataxia_id:table_manager(),
+			ataxia_server,
+			add_at,
+			[DB, ID, Lock, Value])
+	of
+		ok -> {noreply, State};
+		{stop, none, {DB, ID, self()}};
+		Error -> {error, Error}
+	end
+handle_cast
+(
 	{request, ReplyTo, RequestID, {fetch, DB, ID, Lock}},
 	State
 ) ->
@@ -97,24 +134,24 @@ handle_cast
 			),
 			{noreply, State};
 
-		{ok, NewValue, NewVersion} ->
+		{ok, NewVersion, NewValue} ->
 			reply_to
 			(
 				ReplyTo,
 				RequestID,
-				{ok, NewValue, NewVersion}
+				{ok, NewVersion, NewValue}
 			),
 			{
 				noreply,
 				#cache_entry{ value = NewValue, version = NewVersion }
 			};
 
-		{ok, NewLock, NewValue, NewVersion} ->
+		{ok, NewLock, NewVersion, NewValue} ->
 			reply_to
 			(
 				ReplyTo,
 				RequestID,
-				{ok, NewLock, NewValue, NewVersion}
+				{ok, NewLock, NewVersion, NewValue}
 			),
 			{
 				noreply,
@@ -430,6 +467,10 @@ handle_cast
 				noreply,
 				#cache_entry{ value = NewValue, version = NewVersion }
 			};
+
+		{error, condition} ->
+			reply_to(ReplyTo, RequestID, {error, condition}),
+			{noreply, State};
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),

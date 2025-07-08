@@ -4,13 +4,15 @@
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -type type() ::
-   (
-      'not_found'
-      | 'no_match'
-      | 'denied'
-      | 'locked'
-      | {'aborted', any()}
-   ).
+	{
+		'error',
+		(
+			'lock'
+			| 'condition'
+			| 'id'
+			| 'version'
+		)
+	}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -28,9 +30,7 @@
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec to_string (type()) -> binary().
-to_string (not_found) -> <<"No entry with this ID.">>;
-to_string (no_match) -> <<"No entry satisfy this condition.">>;
-to_string (denied) -> <<"Access to entry denied.">>;
-to_string (locked) -> <<"Entry is locked.">>;
-to_string ({aborted, Error}) ->
-   list_to_binary(io_lib:format("Server-side error: ~p.", [Error])).
+to_string ({error, lock}) -> <<"Lock not allowing operation.">>;
+to_string ({error, condition}) -> <<"The condition did not match.">>;
+to_string ({error, version}) -> <<"The version did not match.">>;
+to_string ({error, id}) -> <<"There is no entry with this ID.">>.
