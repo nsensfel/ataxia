@@ -71,7 +71,7 @@ store (DB, ID, Entry) ->
 				case {Update0 == Update1, Update1 == Old, Update0 == Old} of
 					{true, _, _} -> Update1;
 					{_, true, _} -> Update1;
-					{_, _, 1} -> Update0
+					{_, _, true} -> Update0
 				end
 		end,
 
@@ -132,7 +132,7 @@ read (DB, ID) ->
 			case {Update0 == Update1, Update1 == Old, Update0 == Old} of
 				{true, _, _} -> {ok, binary_to_term(Update1)};
 				{_, true, _} -> {ok, binary_to_term(Update1)};
-				{_, _, 1} -> {ok, binary_to_term(Update0)}
+				{_, _, true} -> {ok, binary_to_term(Update0)}
 			end
 	end.
 

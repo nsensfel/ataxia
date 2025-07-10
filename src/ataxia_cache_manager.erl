@@ -58,7 +58,7 @@ request_entry (DB, ID, State) ->
 	case dict:find({DB, ID}, State) of
 		{ok, Result} -> {Result, State};
 		error ->
-			Result = ataxia_cache_entry:start(DB, ID),
+			Result = ataxia_cache_entry:start(),
 			NewState = dict:store({DB, ID}, Result, State),
 			{Result, NewState}
 	end.
@@ -136,7 +136,7 @@ start (IX) ->
 	{ok, _} =
 		gen_server:start
 		(
-			generate_atom_from_index(IX),
+			{local, generate_atom_from_index(IX)},
 			?MODULE,
 			none,
 			[]

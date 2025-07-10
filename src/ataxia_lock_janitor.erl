@@ -35,7 +35,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec release_lock (pid(), node(), pid()) -> ok.
 release_lock (ParentPID, LockNode, LockPid) ->
-	rpc:cast(LockNode, ataxia_lock, release_lock, [node(), ParentPID, LockPid]).
+	erpc:cast(LockNode, ataxia_lock, release_lock, [node(), ParentPID, LockPid]).
 
 -spec janitor (#state{}) -> 'ok'.
 janitor (State) ->
@@ -94,7 +94,7 @@ new () ->
 	spawn_link
 	(
 		fun janitor/1,
-		[#state{ parent = self(), locks = orddict:new() }]
+		[#state{ parent = self(), locks = set:new() }]
 	).
 
 -spec request_lock
@@ -106,7 +106,7 @@ new () ->
 ) -> ({ok, lock_reference()} | {error, any()}).
 request_lock (DB, ID, Mode, Janitor) ->
 	Result =
-		ataxia_network:request
+		ataxia_network:call
 		(
 			DB,
 			ID,

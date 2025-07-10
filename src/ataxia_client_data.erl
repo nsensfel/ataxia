@@ -37,7 +37,6 @@
 		get_id/1,
 		get_lock/1,
 		get_ataxic/1,
-		get_lock/1,
 		get_value/1
 	]
 ).

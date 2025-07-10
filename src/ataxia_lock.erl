@@ -73,8 +73,9 @@
 -export
 (
 	[
-		request_lock/5,
+		request_lock/4,
 		release_lock/2,
+		release_lock/3,
 		has_lock/3,
 		new/0,
 		timeout_process/1
@@ -96,8 +97,8 @@ grant (Request, Category, State) ->
 -spec notify_all_reads (type()) -> type().
 notify_all_reads (State) ->
 	case queue:out(State#lock.queue) of
-		empty -> State;
-		{{ok, Value}, NewQueue} ->
+		{empty, _} -> State;
+		{{value, Value}, NewQueue} ->
 			case Value#request.is_write of
 				true -> State;
 				_ ->
@@ -116,8 +117,8 @@ request_timeout (State) ->
 timeout (State) ->
 	S0State = State#lock{ holders = sets:new() },
 	case queue:out(S0State#lock.queue) of
-		empty -> S0State#lock{ status = unlocked };
-		{{ok, Value}, NewQueue} ->
+		{empty, _} -> S0State#lock{ status = unlocked };
+		{{value, Value}, NewQueue} ->
 			case Value#request.is_write of
 				true ->
 					S1State = grant(Value, write, S0State),
@@ -131,7 +132,7 @@ timeout (State) ->
 				_ ->
 					S1State = notify_all_reads(S0State),
 					request_timeout(S1State),
-					S1State#lock{ status = readed }
+					S1State#lock{ status = read }
 			end
 	end.
 
@@ -263,9 +264,10 @@ new () ->
 has_lock (LockPID, Client, Mode) ->
 	gen_server:call(LockPID, {has_lock, Mode, Client}).
 
-request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
-	{ok, LockPID} = gen_server:call(ataxia_lock_manager, get_lock, [DB, ID]),
-	gen_server:cast(LockPID, {Mode, self(), ClientNode, ClientPID}),
+-spec request_lock (atom(), ataxia_id:type(), holder(), category()) -> holder().
+request_lock (DB, ID, Client, Mode) ->
+	LockPID = ataxia_lock_manager:request_lock_for(DB, ID, none),
+	gen_server:cast(LockPID, {Mode, self(), Client}),
 	receive
 		{ataxia_reply, lock, granted} -> #holder{ node = node(), pid = LockPID }
 	end.
@@ -274,3 +276,7 @@ request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
 release_lock (LockPID, Client) ->
 	gen_server:cast(LockPID, {unlocked, Client}),
 	ok.
+
+-spec release_lock (pid(), node(), pid()) -> 'ok'.
+release_lock (LockPID, Node, PID) ->
+	release_lock(LockPID, #holder{ node = Node, pid = PID }).

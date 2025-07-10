@@ -106,7 +106,7 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 			ID,
 			EntryPID
 		),
-	ataxia_cache_entry:request(NewEntryPID, Request),
+	ataxia_cache_entry:request(NewEntryPID, 0, Request),
 	case is_process_alive(NewEntryPID) of
 		true ->
 			await_reply
@@ -142,7 +142,7 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 request (Client, DB, ID, Request) ->
 	case dict:find({DB, ID}, Client#client.known_cache_entries) of
 		{ok, EntryPID} ->
-			ataxia_cache_entry:request(EntryPID, Request),
+			ataxia_cache_entry:request(EntryPID, 0, Request),
 			case is_process_alive(EntryPID) of
 				true -> await_reply(Client, DB, ID, Request, EntryPID, 0);
 				false -> request_new_handler_of(Client, DB, ID, Request, EntryPID)
@@ -168,8 +168,7 @@ merge_cache_entry_dicts (Client, DB, ID, _A, _B) ->
 remove_cache_entry (Key, Client) ->
 	Client#client
 	{
-		known_cache_entries =
-			dict:remove(Key, Client#client.known_cache_entries)
+		known_cache_entries = dict:erase(Key, Client#client.known_cache_entries)
 	}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -180,7 +179,8 @@ new () ->
 	#client
 	{
 		known_cache_entries = dict:new(),
-		cache_managers = ataxia_cache_manager:get_collection()
+		cache_managers = ataxia_cache_manager:get_collection(),
+		next_request_id = 0
 	}.
 
 -spec merge (type(), type()) -> type().
@@ -369,7 +369,7 @@ blind_update_then_fetch (Client, DB, ID, Lock, Op) ->
 		ataxia_lock:message(),
 		ataxia_id:type()
 	) -> {type(), ('ok' | ataxia_error:type())}.
-blind_remove (Client, DB, ID, Lock) ->
+blind_remove (Client, DB, Lock, ID) ->
 	{NewClient, Reply} =
 		request(Client, DB, ID, {blind_remove, DB, ID, Lock}),
 	{

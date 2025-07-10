@@ -463,7 +463,7 @@ fetch_if (Client, DB, ID, Lock, Version, Cond) ->
 		| ataxia_error:type()
 	).
 blind_update_if (Client, DB, ID, Lock, Cond, Op) ->
-	Request = {fetch_if, DB, ID, Cond, Op},
+	Request = {blind_update_if, DB, ID, Cond, Op},
 	Permission = write,
 	perform_with_lock(Client, DB, ID, Lock, Permission, Request).
 
