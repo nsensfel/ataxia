@@ -23,7 +23,7 @@
 (
 	request,
 	{
-		is_write :: bool(),
+		is_write :: boolean(),
 		client :: holder(),
 		local_pid :: pid()
 	}
@@ -37,7 +37,7 @@
 	{
 		status :: category(),
 		timeout :: pid(),
-		queue :: queue(request()),
+		queue :: queue:queue(request()),
 		holders :: sets:set(holder())
 	}
 ).
@@ -52,7 +52,7 @@
 	[
 		type/0,
 		category/0,
-		message/0,
+		message/0
 	]
 ).
 
@@ -73,11 +73,11 @@
 -export
 (
 	[
-		request_lock/2,
-		write_stored_request/2,
-		read_stored_request/2,
-		release_request/2,
-		start/0
+		request_lock/5,
+		release_lock/2,
+		has_lock/3,
+		new/0,
+		timeout_process/1
 	]
 ).
 
@@ -90,7 +90,7 @@ grant (Request, Category, State) ->
 	State#lock
 	{
 		status = Category,
-		holders = sets:add_element(Request#client, State#lock.holders)
+		holders = sets:add_element(Request#request.client, State#lock.holders)
 	}.
 
 -spec notify_all_reads (type()) -> type().
@@ -101,9 +101,9 @@ notify_all_reads (State) ->
 			case Value#request.is_write of
 				true -> State;
 				_ ->
-					S0State#lock{ queue = NewQueue },
+					S0State = State#lock{ queue = NewQueue },
 					S1State = grant(Value, read, S0State),
-					notify_all_reads(B, S1State)
+					notify_all_reads(S1State)
 			end
 	end.
 
@@ -129,7 +129,7 @@ timeout (State) ->
 					};
 
 				_ ->
-					S1State = notify_all_readlocks(S0State),
+					S1State = notify_all_reads(S0State),
 					request_timeout(S1State),
 					S1State#lock{ status = readed }
 			end
@@ -155,13 +155,13 @@ init (_) ->
 		#lock
 		{
 			status = unlocked,
-			timeout = spawn(?MODULE, timeout_process, [pid()]),
+			timeout = spawn(?MODULE, timeout_process, [self()]),
 			queue = queue:new(),
 			holders = sets:new()
 		}
-	};
+	}.
 
-handle_call ({has_lock, Mode, Holder}, State) ->
+handle_call ({has_lock, Mode, Holder}, _From, State) ->
 	Result =
 		case {Mode, State#lock.status} of
 			{A, B} when A == B -> sets:is_element(Holder, State#lock.holders);
@@ -172,14 +172,21 @@ handle_call ({has_lock, Mode, Holder}, State) ->
 
 handle_cast (timeout, State) ->
 	S0State = timeout(State),
-	case S0tate#lock.status of
+	case S0State#lock.status of
 		unlocked ->
 			S0State#lock.timeout ! stop,
-			{stop, timeout, State};
+			{stop, timeout, S0State};
 
 		_ -> {noreply, S0State}
 	end;
 handle_cast ({write, LocalPID, ClientNode, ClientPID}, State) ->
+	Request =
+		#request
+		{
+			client = #holder{ pid = ClientPID, node = ClientNode},
+			local_pid = LocalPID,
+			is_write = true
+		},
 	case State#lock.status of
 		unlocked -> {noreply, grant(Request, write, State)};
 		_ ->
@@ -190,7 +197,7 @@ handle_cast ({write, LocalPID, ClientNode, ClientPID}, State) ->
 					local_pid = LocalPID,
 					is_write = true
 				},
-			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) }
+			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) },
 			{noreply, NewState}
 	end;
 handle_cast ({read, LocalPID, ClientNode, ClientPID}, State) ->
@@ -206,33 +213,36 @@ handle_cast ({read, LocalPID, ClientNode, ClientPID}, State) ->
 			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) },
 			{noreply, NewState};
 
-		_ when (queue:len(State#queue) == 0) ->
-			S0State = grant(Request, read, State),
-			request_timeout(S0State),
-			{noreply, S0State};
-
 		_ ->
-			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) },
-			{noreply, NewState};
+			case (queue:len(State#lock.queue) == 0) of
+				true ->
+					S0State = grant(Request, read, State),
+					request_timeout(S0State),
+					{noreply, S0State};
+
+				_ ->
+					NewState =
+						State#lock{ queue = queue:in(Request, State#lock.queue) },
+					{noreply, NewState}
+			end
 	end;
 handle_cast ({unlocked, ClientNode, ClientPID}, State) ->
-	Holder = #holder{ node = ClientNode, pid = ClientPID }),
+	Holder = #holder{ node = ClientNode, pid = ClientPID },
 	S0State =
 		State#lock{ holders = sets:del_element(Holder, State#lock.holders) },
 
 	S1State =
-		if sets:is_empty(S0State#lock.holders)
-			timeout(S0State)
-		else
-			S0State
+		case sets:is_empty(S0State#lock.holders) of
+			true -> timeout(S0State);
+			_ ->S0State
 		end,
 
-	case S0tate#lock.status of
+	case S1State#lock.status of
 		unlocked ->
-			S0State#lock.timeout ! stop,
-			{stop, timeout, State};
+			S1State#lock.timeout ! stop,
+			{stop, timeout, S1State};
 
-		_ -> {noreply, S0State}
+		_ -> {noreply, S1State}
 	end.
 
 terminate (_, _) -> ok.
@@ -249,7 +259,7 @@ handle_info(_, State) ->
 new () ->
 	gen_server:start_link(?MODULE, [], []).
 
--spec has_lock (pid(), holder(), category()).
+-spec has_lock (pid(), holder(), category()) -> boolean().
 has_lock (LockPID, Client, Mode) ->
 	gen_server:call(LockPID, {has_lock, Mode, Client}).
 
@@ -261,6 +271,6 @@ request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
 	end.
 
 -spec release_lock (pid(), holder()) -> 'ok'.
-release_lock (LockPid, Client) ->
+release_lock (LockPID, Client) ->
 	gen_server:cast(LockPID, {unlocked, Client}),
 	ok.

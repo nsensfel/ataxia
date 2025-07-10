@@ -1,9 +1,9 @@
 %%%% Select
--record(field, {ix :: non_neg_integer(), op :: ataxic:basic()}).
--record(upfield, {ix :: non_neg_integer(), op :: ataxic:basic()}).
+-record(field, {ix :: non_neg_integer(), op :: ataxic:type()}).
+-record(upfield, {ix :: non_neg_integer(), op :: ataxic:type()}).
 
 %%%% Sequence of instructions
--record(seq, {ops :: list(ataxic:basic())}).
+-record(seq, {ops :: list(ataxic:type())}).
 
 %%%% Values Access
 -record(const, {value :: any()}).
@@ -12,7 +12,7 @@
 % Possible improvement: add support for some sort of registers.
 % This would add a dict (no need for orddict here) when evaluating Ataxic
 % expressions, with the following functions:
-% -record(reg_store, {name :: binary(), op :: ataxic:basic()}).
+% -record(reg_store, {name :: binary(), op :: ataxic:type()}).
 % -record(reg_load, {name :: binary()}).
 % It's kind of weird to use though, cause you can't retrieve what you've stored
 % at a node that was deeper in the query's tree. It can be used to move values
@@ -21,56 +21,54 @@
 
 -record
 (
-   apply_fun,
-   {
-      module :: atom(),
-      function :: atom(),
-      params :: list(ataxic:basic())
-   }
+	apply_fun,
+	{
+		module :: atom(),
+		function :: atom(),
+		params :: list(ataxic:type())
+	}
 ).
 
 %%%% Number Comparison
--record(gt, {p0 :: ataxic:basic(), p1 :: ataxic:basic()}).
--record(ge, {p0 :: ataxic:basic(), p1 :: ataxic:basic()}).
--record(lt, {p0 :: ataxic:basic(), p1 :: ataxic:basic()}).
--record(le, {p0 :: ataxic:basic(), p1 :: ataxic:basic()}).
--record(eq, {p0 :: ataxic:basic(), p1 :: ataxic:basic()}).
+-record(gt, {p0 :: ataxic:type(), p1 :: ataxic:type()}).
+-record(ge, {p0 :: ataxic:type(), p1 :: ataxic:type()}).
+-record(lt, {p0 :: ataxic:type(), p1 :: ataxic:type()}).
+-record(le, {p0 :: ataxic:type(), p1 :: ataxic:type()}).
+-record(eq, {p0 :: ataxic:type(), p1 :: ataxic:type()}).
 
 %%%% Bool Operations
--record(land, {params :: list(ataxic:basic())}).
--record(lor, {params :: list(ataxic:basic())}).
--record(neg, {param :: ataxic:basic()}).
+-record(land, {params :: list(ataxic:type())}).
+-record(lor, {params :: list(ataxic:type())}).
+-record(neg, {param :: ataxic:type()}).
 
 %%%% List Operations
--record(list_cons, {param :: ataxic:basic()}).
+-record(list_cons, {param :: ataxic:type()}).
 
 %%%% Condition
 -record
 (
-   tern,
-   {
-      condition :: ataxic:basic(),
-      then :: ataxic:basic(),
-      else :: ataxic:basic()
-   }
+	tern,
+	{
+		condition :: ataxic:type(),
+		then :: ataxic:type(),
+		else :: ataxic:type()
+	}
 ).
 
 %%%% Memory
 -record
 (
-   letr,
-   {
-      bindings :: list({ataxic:variable(), ataxic:basic()}),
-      op :: ataxic:basic()
-   }
+	letr,
+	{
+		bindings :: list({ataxic:variable(), ataxic:type()}),
+		op :: ataxic:type()
+	}
 ).
 -record (var, { name :: ataxic:variable() }).
 
 %%%% META OP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% Select
--record(read_perm, {op :: ataxic:basic()}).
--record(write_perm, {op :: ataxic:basic()}).
--record(lock, {op :: ataxic:basic()}).
--record(value, {op :: ataxic:basic()}).
-
--record(mseq, {ops :: list(ataxic:meta())}).
+-record(read_perm, {op :: ataxic:type()}).
+-record(write_perm, {op :: ataxic:type()}).
+-record(lock, {op :: ataxic:type()}).
+-record(value, {op :: ataxic:type()}).

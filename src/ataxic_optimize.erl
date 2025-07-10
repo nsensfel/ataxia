@@ -20,342 +20,336 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % list(..., const(a), ...) -> list(const(a), ...)
 -spec remove_overridden_operations
-   (
-      list(ataxic:basic())
-   )
-   -> list(ataxic:basic()).
+	(
+		list(ataxic:type())
+	)
+	-> list(ataxic:type()).
 remove_overridden_operations (List) ->
-   {_, Result} =
-      lists:foldr
-      (
-         fun (Elem, CurrentResult) ->
-            case CurrentResult of
-               {done, _} -> CurrentResult;
-               {ok, L} ->
-                  case Elem of
-                     #const{} -> {done, [Elem|L]};
-                     #current{} -> {ok, L};
-                     _ -> {ok, [Elem|L]}
-                  end
-            end
-         end,
-         {ok, []},
-         List
-      ),
-   Result.
+	{_, Result} =
+		lists:foldr
+		(
+			fun (Elem, CurrentResult) ->
+				case CurrentResult of
+					{done, _} -> CurrentResult;
+					{ok, L} ->
+						case Elem of
+							#const{} -> {done, [Elem|L]};
+							#current{} -> {ok, L};
+							_ -> {ok, [Elem|L]}
+						end
+				end
+			end,
+			{ok, []},
+			List
+		),
+	Result.
 
 -spec optimize_generic_update_sequence
-   (
-      list(ataxic:basic()),
-      list(ataxic:basic()),
-      fun((OP) -> boolean()),
-      fun((IX, IX) -> boolean()),
-      fun((IX, OP) -> Update),
-      fun((Update) -> OP),
-      fun((Update) -> IX)
-   )
-   -> ataxic:basic().
+	(
+		list(ataxic:type()),
+		list(ataxic:type()),
+		fun((OP) -> boolean()),
+		fun((IX, IX) -> boolean()),
+		fun((IX, OP) -> Update),
+		fun((Update) -> OP),
+		fun((Update) -> IX)
+	)
+	-> ataxic:type().
 optimize_generic_update_sequence
 (
-   [],
-   Result,
-   _IsCompatible,
-   _IndexIsBefore,
-   _NewUpdate,
-   _GetOperation,
-   _GetIndex
+	[],
+	Result,
+	_IsCompatible,
+	_IndexIsBefore,
+	_NewUpdate,
+	_GetOperation,
+	_GetIndex
 ) ->
-   case Result of
-      [] -> ataxic:current_value();
-      [A] -> A;
-      _ -> ataxic:sequence(Result)
-   end;
+	case Result of
+		[] -> ataxic:current_value();
+		[A] -> A;
+		_ -> ataxic:sequence(Result)
+	end;
 optimize_generic_update_sequence
 (
-   UnsortedOPs,
-   CurrentResults,
-   IsCompatible,
-   IndexIsBefore,
-   NewUpdate,
-   GetOperation,
-   GetIndex
+	UnsortedOPs,
+	CurrentResults,
+	IsCompatible,
+	IndexIsBefore,
+	NewUpdate,
+	GetOperation,
+	GetIndex
 ) ->
-   % Get all field updates until you encounter something else
-   {Updates, PotentiallyImportantOPs} =
-      lists:splitwith(IsCompatible, UnsortedOPs),
+	% Get all field updates until you encounter something else
+	{Updates, PotentiallyImportantOPs} =
+		lists:splitwith(IsCompatible, UnsortedOPs),
 
-   % Sort updates by index
-   SortedUpdates = lists:sort(IndexIsBefore, Updates),
+	% Sort updates by index
+	SortedUpdates = lists:sort(IndexIsBefore, Updates),
 
-   % Merge all updates that are for the same index
-   % LastIX, LastUpdateOPs correspond to the last updates that should be
-   % merged but that were surprised by the sequence ending.
-   {LastIX, LastUpdateOPs, OtherMergedUpdates} =
-      lists:foldl
-      (
-         fun (Candidate, {CurrentIX, CurrentOPs, CurrentResult}) ->
-            CandidateIX = GetIndex(Candidate),
-            case (CandidateIX == CurrentIX) of
-               true ->
-                  {
-                     CurrentIX,
-                     [GetOperation(Candidate)|CurrentOPs],
-                     CurrentResult
-                  };
+	% Merge all updates that are for the same index
+	% LastIX, LastUpdateOPs correspond to the last updates that should be
+	% merged but that were surprised by the sequence ending.
+	{LastIX, LastUpdateOPs, OtherMergedUpdates} =
+		lists:foldl
+		(
+			fun (Candidate, {CurrentIX, CurrentOPs, CurrentResult}) ->
+				CandidateIX = GetIndex(Candidate),
+				case (CandidateIX == CurrentIX) of
+					true ->
+						{
+							CurrentIX,
+							[GetOperation(Candidate)|CurrentOPs],
+							CurrentResult
+						};
 
-               _ ->
-                  {
-                     CandidateIX,
-                     [GetOperation(Candidate)],
-                     (
-                        case CurrentOPs of
-                           [] -> CurrentResult;
-                           [OP] ->
-                              [
-                                 NewUpdate(CurrentIX, OP)
-                                 |CurrentResult
-                              ];
-                           _ ->
-                              [
-                                 NewUpdate
-                                 (
-                                    CurrentIX,
-                                    light
-                                    (
-                                       ataxic:sequence
-                                       (
-                                          lists:reverse(CurrentOPs)
-                                       )
-                                    )
-                                 )
-                                 |CurrentResult
-                              ]
-                        end
-                     )
-                  }
-            end
-         end,
-         {-1, [], []},
-         SortedUpdates
-      ),
+					_ ->
+						{
+							CandidateIX,
+							[GetOperation(Candidate)],
+							(
+								case CurrentOPs of
+									[] -> CurrentResult;
+									[OP] ->
+										[
+											NewUpdate(CurrentIX, OP)
+											|CurrentResult
+										];
+									_ ->
+										[
+											NewUpdate
+											(
+												CurrentIX,
+												light
+												(
+													ataxic:sequence
+													(
+														lists:reverse(CurrentOPs)
+													)
+												)
+											)
+											|CurrentResult
+										]
+								end
+							)
+						}
+				end
+			end,
+			{-1, [], []},
+			SortedUpdates
+		),
 
-   % Add the merged LastUpdateOPs for LastIX
-   MergedUpdates =
-      (
-         case LastUpdateOPs of
-            [] -> OtherMergedUpdates;
-            [OP] ->
-               [
-                  NewUpdate(LastIX, OP)
-                  |OtherMergedUpdates
-               ];
-            _ ->
-               [
-                  NewUpdate
-                  (
-                     LastIX,
-                     light(ataxic:sequence(lists:reverse(LastUpdateOPs)))
-                  )
-                  |OtherMergedUpdates
-               ]
-         end
-      ),
+	% Add the merged LastUpdateOPs for LastIX
+	MergedUpdates =
+		(
+			case LastUpdateOPs of
+				[] -> OtherMergedUpdates;
+				[OP] ->
+					[
+						NewUpdate(LastIX, OP)
+						|OtherMergedUpdates
+					];
+				_ ->
+					[
+						NewUpdate
+						(
+							LastIX,
+							light(ataxic:sequence(lists:reverse(LastUpdateOPs)))
+						)
+						|OtherMergedUpdates
+					]
+			end
+		),
 
-   % Skip the OPs until we find another field update
-   {ImportantOPs, PotentialUpdates} =
-      lists:splitwith
-      (
-         fun (E) -> not IsCompatible(E) end,
-         PotentiallyImportantOPs
-      ),
+	% Skip the OPs until we find another field update
+	{ImportantOPs, PotentialUpdates} =
+		lists:splitwith
+		(
+			fun (E) -> not IsCompatible(E) end,
+			PotentiallyImportantOPs
+		),
 
-   optimize_generic_update_sequence
-   (
-      PotentialUpdates,
-      (CurrentResults ++ lists:reverse(MergedUpdates) ++ ImportantOPs),
-      IsCompatible,
-      IndexIsBefore,
-      NewUpdate,
-      GetOperation,
-      GetIndex
-   ).
+	optimize_generic_update_sequence
+	(
+		PotentialUpdates,
+		(CurrentResults ++ lists:reverse(MergedUpdates) ++ ImportantOPs),
+		IsCompatible,
+		IndexIsBefore,
+		NewUpdate,
+		GetOperation,
+		GetIndex
+	).
 
--spec optimize_update_field_sequence (list(ataxic:basic())) -> ataxic:basic().
+-spec optimize_update_field_sequence (list(ataxic:type())) -> ataxic:type().
 optimize_update_field_sequence (List) ->
-   optimize_generic_update_sequence
-   (
-      List,
-      [],
-      fun (E) -> is_record(E, upfield) end,
-      fun (A, B) -> ((A#upfield.ix) =< (B#upfield.ix)) end,
-      fun ataxic:update_field/2,
-      fun (E) -> E#upfield.op end,
-      fun (E) -> E#upfield.ix end
-   ).
+	optimize_generic_update_sequence
+	(
+		List,
+		[],
+		fun (E) -> is_record(E, upfield) end,
+		fun (A, B) -> ((A#upfield.ix) =< (B#upfield.ix)) end,
+		fun ataxic:update_field/2,
+		fun (E) -> E#upfield.op end,
+		fun (E) -> E#upfield.ix end
+	).
 
--spec optimize_update_orddict_sequence (list(ataxic:basic())) -> ataxic:basic().
+-spec optimize_update_orddict_sequence (list(ataxic:type())) -> ataxic:type().
 optimize_update_orddict_sequence (List) ->
-   optimize_generic_update_sequence
-   (
-      List,
-      [],
-      fun (E) ->
-         case E of
-            #apply_fun
-            {
-               module = orddict,
-               function = store,
-               params = [ConstIX1, OP, #current{}]
-            } ->
-               case OP of
-                  #const{} -> true;
-                  #seq
-                  {
-                     ops =
-                        [
-                           #apply_fun
-                           {
-                              module = orddict,
-                              function = fetch,
-                              params = [ConstIX2, #current{}]
-                           },
-                           _
-                        ]
-               } -> (ConstIX1 == ConstIX2);
-               _ -> false
-            end;
+	optimize_generic_update_sequence
+	(
+		List,
+		[],
+		fun (E) ->
+			case E of
+				#apply_fun
+				{
+					module = orddict,
+					function = store,
+					params = [ConstIX1, OP, #current{}]
+				} ->
+					case OP of
+						#const{} -> true;
+						#seq
+						{
+							ops =
+								[
+									#apply_fun
+									{
+										module = orddict,
+										function = fetch,
+										params = [ConstIX2, #current{}]
+									},
+									_
+								]
+					} -> (ConstIX1 == ConstIX2);
+					_ -> false
+				end;
 
-            _ -> false
-         end
-      end,
-      fun (A, B) ->
-         [AIX|_] = A#apply_fun.params,
-         [BIX|_] = B#apply_fun.params,
-         (AIX =< BIX)
-      end,
-      fun ataxic_sugar:update_orddict_element/2,
-      fun (E) ->
-         [_,StoreOP|_] = E#apply_fun.params,
-         case StoreOP of
-            #const{} -> StoreOP;
-            #seq{ ops = [_FetchOP|ActualUpdateOP]} ->
-               ataxic:sequence(ActualUpdateOP);
-            _ -> error(bad_optimize)
-         end
-      end,
-      fun (E) ->
-         [#const{ value = IX }|_] = E#apply_fun.params,
-         IX
-      end
-   ).
+				_ -> false
+			end
+		end,
+		fun (A, B) ->
+			[AIX|_] = A#apply_fun.params,
+			[BIX|_] = B#apply_fun.params,
+			(AIX =< BIX)
+		end,
+		fun ataxic_sugar:update_orddict_element/2,
+		fun (E) ->
+			[_,StoreOP|_] = E#apply_fun.params,
+			case StoreOP of
+				#const{} -> StoreOP;
+				#seq{ ops = [_FetchOP|ActualUpdateOP]} ->
+					ataxic:sequence(ActualUpdateOP);
+				_ -> error(bad_optimize)
+			end
+		end,
+		fun (E) ->
+			[#const{ value = IX }|_] = E#apply_fun.params,
+			IX
+		end
+	).
 
--spec flatten_sequence (list(ataxic:basic())) -> list(ataxic:basic()).
+-spec flatten_sequence (list(ataxic:type())) -> list(ataxic:type()).
 flatten_sequence (OPs) ->
-   lists:foldr
-   (
-      fun (E, CurrentOPs) ->
-         case is_record(E, seq) of
-            true -> (E#seq.ops ++ CurrentOPs);
-            _ -> [E|CurrentOPs]
-         end
-      end,
-      [],
-      OPs
-   ).
+	lists:foldr
+	(
+		fun (E, CurrentOPs) ->
+			case is_record(E, seq) of
+				true -> (E#seq.ops ++ CurrentOPs);
+				_ -> [E|CurrentOPs]
+			end
+		end,
+		[],
+		OPs
+	).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec aggressive
-   (ataxic:basic()) -> ataxic:basic();
-   (ataxic:meta()) -> ataxic:meta().
+-spec aggressive (ataxic:type()) -> ataxic:type().
 aggressive (In = #field{ op = OP }) ->
-   In#field{ op = aggressive(OP) };
+	In#field{ op = aggressive(OP) };
 aggressive (In = #upfield{ op = S0OP}) ->
-   S1OP = aggressive(S0OP),
+	S1OP = aggressive(S0OP),
 
-   case S1OP of
-      #current{} -> S1OP;
-      _ -> In#upfield{ op = S1OP }
-   end;
+	case S1OP of
+		#current{} -> S1OP;
+		_ -> In#upfield{ op = S1OP }
+	end;
 aggressive (#seq{ ops = S0OPs }) ->
-   S1OPs = lists:map(fun aggressive/1, S0OPs),
-   S2OPs = flatten_sequence(S1OPs),
-   S3OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S2OPs),
-   S0Result = optimize_update_field_sequence(S3OPs),
-   S1Result =
-      case S0Result of
-         #seq{ ops = S4OPs } -> optimize_update_orddict_sequence(S4OPs);
-         _ -> S0Result
-      end,
+	S1OPs = lists:map(fun aggressive/1, S0OPs),
+	S2OPs = flatten_sequence(S1OPs),
+	S3OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S2OPs),
+	S0Result = optimize_update_field_sequence(S3OPs),
+	S1Result =
+		case S0Result of
+			#seq{ ops = S4OPs } -> optimize_update_orddict_sequence(S4OPs);
+			_ -> S0Result
+		end,
 
-   S2Result =
-      case S1Result of
-         #seq{ ops = S5OPs } ->
-            #seq{ ops = remove_overridden_operations(S5OPs) };
-         _ -> S1Result
-      end,
+	S2Result =
+		case S1Result of
+			#seq{ ops = S5OPs } ->
+				#seq{ ops = remove_overridden_operations(S5OPs) };
+			_ -> S1Result
+		end,
 
-   case S2Result of
-      #seq{ ops = [OP] } -> OP;
-      _ -> S2Result
-   end;
+	case S2Result of
+		#seq{ ops = [OP] } -> OP;
+		_ -> S2Result
+	end;
 aggressive (In = #apply_fun{ params = OPs }) ->
-   In#apply_fun
-   {
-      params = lists:map(fun aggressive/1, OPs)
-   };
+	In#apply_fun
+	{
+		params = lists:map(fun aggressive/1, OPs)
+	};
 aggressive (In = #list_cons{ param = OP }) ->
-   In#list_cons{ param = aggressive(OP) };
+	In#list_cons{ param = aggressive(OP) };
 aggressive (In = #read_perm{ op = OP }) ->
-   In#read_perm{ op = aggressive(OP) };
+	In#read_perm{ op = aggressive(OP) };
 aggressive (In = #write_perm{ op = OP }) ->
-   In#write_perm{ op = aggressive(OP) };
+	In#write_perm{ op = aggressive(OP) };
 aggressive (In = #lock{ op = OP }) ->
-   In#lock{ op = aggressive(OP) };
+	In#lock{ op = aggressive(OP) };
 aggressive (In = #value{ op = OP }) ->
-   In#value{ op = aggressive(OP) };
-aggressive (In = #mseq{ ops = OPs }) ->
-   In#mseq{ ops = lists:map(fun aggressive/1, OPs) };
+	In#value{ op = aggressive(OP) };
 aggressive (In = #letr{ bindings = Bs, op = OP }) ->
-   In#letr
-   {
-      op = aggressive(OP),
-      bindings =
-         lists:map(fun ({Key, Value}) -> {Key, aggressive(Value)} end, Bs)
-   };
+	In#letr
+	{
+		op = aggressive(OP),
+		bindings =
+			lists:map(fun ({Key, Value}) -> {Key, aggressive(Value)} end, Bs)
+	};
 aggressive (In = #tern{ condition = C, then = T, else = E }) ->
-   In#tern
-   {
-      condition = aggressive(C),
-      then = aggressive(T),
-      else = aggressive(E)
-   };
+	In#tern
+	{
+		condition = aggressive(C),
+		then = aggressive(T),
+		else = aggressive(E)
+	};
 aggressive (Other) ->
-   Other.
+	Other.
 
--spec light
-   (ataxic:basic()) -> ataxic:basic();
-   (ataxic:meta()) -> ataxic:meta().
+-spec light (ataxic:type()) -> ataxic:type().
 light (#seq{ ops = S0OPs }) ->
-   S1OPs = flatten_sequence(S0OPs),
-   S2OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S1OPs),
-   S0Result = optimize_update_field_sequence(S2OPs),
-   S1Result =
-      case S0Result of
-         #seq{ ops = S4OPs } -> optimize_update_orddict_sequence(S4OPs);
-         _ -> S0Result
-      end,
+	S1OPs = flatten_sequence(S0OPs),
+	S2OPs = lists:filter(fun (E) -> (not is_record(E, current)) end, S1OPs),
+	S0Result = optimize_update_field_sequence(S2OPs),
+	S1Result =
+		case S0Result of
+			#seq{ ops = S4OPs } -> optimize_update_orddict_sequence(S4OPs);
+			_ -> S0Result
+		end,
 
-   S2Result =
-      case S1Result of
-         #seq{ ops = S5OPs } ->
-            #seq{ ops = remove_overridden_operations(S5OPs) };
-         _ -> S1Result
-      end,
+	S2Result =
+		case S1Result of
+			#seq{ ops = S5OPs } ->
+				#seq{ ops = remove_overridden_operations(S5OPs) };
+			_ -> S1Result
+		end,
 
-   case S2Result of
-      #seq{ ops = [OP] } -> OP;
-      _ -> S2Result
-   end;
+	case S2Result of
+		#seq{ ops = [OP] } -> OP;
+		_ -> S2Result
+	end;
 light (OP) -> OP.

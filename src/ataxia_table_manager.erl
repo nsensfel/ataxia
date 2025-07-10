@@ -1,35 +1,30 @@
--module(ataxia_entry).
+-module(ataxia_table_manager).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -record
 (
-	entry,
+	manager,
 	{
-		value :: any(),
-		version :: non_neg_integer()
+		last_id :: ataxia_id:type(),
+		free_ids :: list(ataxia_id:type())
 	}
 ).
 
--type type() :: #entry{}.
+-type type() :: #manager{} | free.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--export_type([type/0]).
-
+%%%% Actual Interface
 -export
 (
 	[
-		new/1,
-		get_value/1,
-		get_version/1,
-
-		update/2,
-
-		get_value_field/0,
-		get_version_field/0
+		new/0,
+		none/0,
+		get_new_id/1,
+		release_id/2
 	]
 ).
 
@@ -40,25 +35,35 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec new (any()) -> type().
-new (Value) -> #entry{value = Value, version = 0 }.
-
--spec get_value (type()) -> any().
-get_value (#entry { value = Result }) -> Result.
-
--spec get_version (type()) -> non_neg_integer().
-get_version (#entry { version = Result }) -> Result.
-
--spec update (any(), type()) -> type().
-update (Value, Item) ->
-	Item#entry
+-spec new() -> type().
+new() ->
+	#manager
 	{
-		value = Value,
-		version = ((Item#entry.version + 1) rem 9999)
+		last_id = ataxia_id:manager_index(),
+		free_ids = []
 	}.
 
--spec get_value_field () -> non_neg_integer().
-get_value_field () -> #entry.value.
+-spec none () -> type().
+none () -> free.
 
--spec get_version_field () -> non_neg_integer().
-get_version_field () -> #entry.version.
+-spec get_new_id (type()) -> {ataxia_id:type(), type()}.
+get_new_id (free) -> {<<"">>, free};
+get_new_id (Manager) ->
+	case Manager#manager.free_ids of
+		[A|B] -> {A, Manager#manager{ free_ids = B } };
+
+		[] ->
+			NextID = ataxia_id:next(Manager#manager.last_id),
+			{
+				NextID,
+				Manager#manager{ last_id = NextID }
+			}
+	end.
+
+-spec release_id (ataxia_id:type(), type()) -> type().
+release_id (_ID, free) -> free;
+release_id (ID, Manager) ->
+	Manager#manager
+	{
+		free_ids = [ID | Manager#manager.free_ids]
+	}.

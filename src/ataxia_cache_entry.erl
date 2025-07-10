@@ -70,8 +70,8 @@ init (_) -> {ok, none}.
 % TODO: only use casts.
 handle_cast
 (
-	{request, ReplyTo, RequestID, {add, DB, Lock, Value}},
-	_State
+	{request, _ReplyTo, _RequestID, {add, DB, Lock, Value}},
+	State
 ) ->
 	case
 		ataxia_network:call
@@ -82,11 +82,10 @@ handle_cast
 			add,
 			[DB, Lock, Value])
 	of
-		{ok, ID} -> {noreply, State};
-		{ok, ID, NewLock} -> {noreply, State};
+		{ok, _ID} -> {noreply, State};
+		{ok, _ID, _NewLock} -> {noreply, State};
 		Error -> {error, Error}
-	end
-	{stop, none, {DB, ID, self()}};
+	end;
 handle_cast
 (
 	{request, ReplyTo, RequestID, {add_at, DB, ID, Lock, Value}},
@@ -101,10 +100,18 @@ handle_cast
 			add_at,
 			[DB, ID, Lock, Value])
 	of
-		ok -> {noreply, State};
-		{stop, none, {DB, ID, self()}};
-		Error -> {error, Error}
-	end
+		{ok, Version} ->
+			reply_to(ReplyTo, RequestID, {ok, Version}),
+			{noreply, #cache_entry{ version = Version, value = Value}};
+
+		{ok, Lock, Version} ->
+			reply_to(ReplyTo, RequestID, {ok, Lock, Version}),
+			{noreply, #cache_entry{ version = Version, value = Value}};
+
+		Error ->
+			reply_to(ReplyTo, RequestID, Error),
+			{stop, none, {DB, ID, self()}}
+	end;
 handle_cast
 (
 	{request, ReplyTo, RequestID, {fetch, DB, ID, Lock}},
@@ -116,7 +123,7 @@ handle_cast
 			Entry -> [DB, ID, Lock, Entry#cache_entry.version]
 		end,
 	case ataxia_network:call(DB, ID, ataxia_server, fetch, Request) of
-		ok ->
+		{ok, ok} ->
 			reply_to
 			(
 				ReplyTo,
@@ -125,7 +132,7 @@ handle_cast
 			),
 			{noreply, State};
 
-		{ok, NewLock} ->
+		{ok, NewLock, ok} ->
 			reply_to
 			(
 				ReplyTo,
@@ -134,19 +141,8 @@ handle_cast
 			),
 			{noreply, State};
 
-		{ok, NewVersion, NewValue} ->
-			reply_to
-			(
-				ReplyTo,
-				RequestID,
-				{ok, NewVersion, NewValue}
-			),
-			{
-				noreply,
-				#cache_entry{ value = NewValue, version = NewVersion }
-			};
 
-		{ok, NewLock, NewVersion, NewValue} ->
+		{ok, NewLock, {NewVersion, NewValue}} ->
 			reply_to
 			(
 				ReplyTo,
@@ -310,7 +306,7 @@ handle_cast
 			[DB, ID, Lock, Op]
 		)
 	of
-		{ok, NewLock, Version, Value} ->
+		{ok, NewLock, {Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, NewLock, Version, Value}),
 			{
 				noreply,
@@ -321,7 +317,7 @@ handle_cast
 				}
 			};
 
-		{ok, Version, Value} ->
+		{ok, {Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, Version, Value}),
 			{
 				noreply,
@@ -344,7 +340,7 @@ handle_cast
 	case
 		ataxia_network:call(DB, ID, ataxia_server, blind_remove, [DB, ID, Lock])
 	of
-		ok -> reply_to(ReplyTo, RequestID, ok);
+		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
 	{stop, none, {DB, ID, self()}};
@@ -368,7 +364,7 @@ handle_cast
 			[DB, ID, Lock, ExpectedCurrentVersion]
 		)
 	of
-		ok -> reply_to(ReplyTo, RequestID, ok);
+		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
 	{stop, none, {DB, ID, self()}};
@@ -406,7 +402,7 @@ handle_cast
 			[DB, ID, Lock, ExpectedCurrentVersion]
 		)
 	of
-		ok -> reply_to(ReplyTo, RequestID, ok);
+		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
 	{stop, none, {DB, ID, self()}};
@@ -426,7 +422,7 @@ handle_cast
 			Entry -> [DB, ID, Lock, Entry#cache_entry.version, Cond]
 		end,
 	case ataxia_network:call(DB, ID, ataxia_server, fetch_if, Request) of
-		ok ->
+		{ok, ok} ->
 			reply_to
 			(
 				ReplyTo,
@@ -435,16 +431,7 @@ handle_cast
 			),
 			{noreply, State};
 
-		{ok, NewLock} ->
-			reply_to
-			(
-				ReplyTo,
-				RequestID,
-				{ok, NewLock, State#cache_entry.version, State#cache_entry.value}
-			),
-			{noreply, State};
-
-		{ok, NewValue, NewVersion} ->
+		{ok, {NewVersion, NewValue}} ->
 			reply_to
 			(
 				ReplyTo,
@@ -456,7 +443,16 @@ handle_cast
 				#cache_entry{ value = NewValue, version = NewVersion }
 			};
 
-		{ok, NewLock, NewValue, NewVersion} ->
+		{ok, NewLock, ok} ->
+			reply_to
+			(
+				ReplyTo,
+				RequestID,
+				{ok, NewLock, State#cache_entry.version, State#cache_entry.value}
+			),
+			{noreply, State};
+
+		{ok, NewLock, {NewVersion, NewValue}} ->
 			reply_to
 			(
 				ReplyTo,
@@ -522,11 +518,11 @@ handle_cast
 			[DB, ID, Lock, Cond, Op]
 		)
 	of
-		{ok, Version, Value} ->
+		{ok, {Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, Version, Value}),
 			{noreply, #cache_entry{ version = Version, value = Value }};
 
-		{ok, NewLock, Version, Value} ->
+		{ok, NewLock, {Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, NewLock, Version, Value}),
 			{noreply, #cache_entry{ version = Version, value = Value }};
 
@@ -554,19 +550,19 @@ handle_cast
 			[DB, Lock, ID, Cond, Op]
 		)
 	of
-		{ok, updated, NewVersion} ->
+		{ok, {updated, NewVersion}} ->
 			reply_to(ReplyTo, RequestID, {ok, updated, NewVersion}),
 			{stop, none, {DB, ID, self()}};
 
-		{ok, updated, NewLock, NewVersion} ->
+		{ok, NewLock, {updated, NewVersion}} ->
 			reply_to(ReplyTo, RequestID, {ok, updated, NewLock, NewVersion}),
 			{stop, none, {DB, ID, self()}};
 
-		{ok, fetch, Version, Value} ->
+		{ok, {fetch, Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, fetch, Version, Value}),
 			{noreply, #cache_entry{ version = Version, value = Value }};
 
-		{ok, fetch, NewLock, Version, Value} ->
+		{ok, NewLock, {fetch, Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, fetch, NewLock, Version, Value}),
 			{noreply, #cache_entry{ version = Version, value = Value }};
 
@@ -589,7 +585,7 @@ handle_cast
 			[DB, ID, Lock, Cond]
 		)
 	of
-		ok ->
+		{ok, ok} ->
 			reply_to(ReplyTo, RequestID, ok),
 			{stop, none, {DB, ID, self()}};
 

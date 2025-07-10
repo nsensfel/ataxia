@@ -19,6 +19,19 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec get_filenames
+	(
+		atom(),
+		ataxia_id:type()
+	)
+	-> {binary(), binary(), binary()}.
+get_filenames (DB, ID) ->
+	BaseFilename = filename:join(DB, ID),
+	Copy0Suffix = <<".0">>,
+	Copy1Suffix = <<".1">>,
+	Copy0Filename = <<BaseFilename/binary, Copy0Suffix/binary>>,
+	Copy1Filename = <<BaseFilename/binary, Copy1Suffix/binary>>,
+	{BaseFilename, Copy0Filename, Copy1Filename}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -28,10 +41,65 @@ ensure_folder_exists (DB) ->
 	ok = filelib:ensure_dir(DB),
 	ok.
 
-
 -spec store (atom(), ataxia_id:type(), ataxia_entry:type()) -> 'ok'.
 store (DB, ID, Entry) ->
-	file:write_file(filename:join(DB, ID), term_to_binary(Entry)),
+	{Base, Copy0, Copy1} = get_filenames(DB, ID),
+
+	{Base, Copy0, Copy1} = get_filenames(DB, ID),
+	Copy0Data =
+		case file:read_file(Copy0) of
+			{ok, Binary0} -> Binary0;
+			_ -> error
+		end,
+	Copy1Data =
+		case file:read_file(Copy1) of
+			{ok, Binary1} -> Binary1;
+			_ -> error
+		end,
+	BaseData =
+		case file:read_file(Base) of
+			{ok, BinaryB} -> BinaryB;
+			_ -> error
+		end,
+
+	PreviousValue =
+		case {Copy0Data, Copy1Data, BaseData} of
+			{error, error, error} -> error;
+			{error, error, ValidData} -> ValidData;
+			{error, Update1, _Old} -> Update1;
+			{Update0, Update1, Old} ->
+				case {Update0 == Update1, Update1 == Old, Update0 == Old} of
+					{true, _, _} -> Update1;
+					{_, true, _} -> Update1;
+					{_, _, 1} -> Update0
+				end
+		end,
+
+	case PreviousValue == error of
+		false ->
+			case PreviousValue == BaseData of
+				false -> file:write_file(Base, PreviousValue);
+				_ -> ok
+			end,
+			case PreviousValue == Copy1Data of
+				false -> file:write_file(Copy1, PreviousValue);
+				_ -> ok
+			end,
+			case PreviousValue == Copy0Data of
+				false -> file:write_file(Copy0, PreviousValue);
+				_ -> ok
+			end;
+
+		_ -> ok
+	end,
+
+	Data = term_to_binary(Entry),
+	file:write_file(Copy0, Data),
+	file:write_file(Copy1, Data),
+	file:write_file(Base, Data),
+
+	file:delete(Copy0),
+	file:delete(Copy1),
 	ok.
 
 -spec read
@@ -40,9 +108,32 @@ store (DB, ID, Entry) ->
 		ataxia_id:type()
 	) -> ({'ok', ataxia_entry:type()} | 'error').
 read (DB, ID) ->
-	case file:write_file(filename:join(DB, ID)) of
-		{ok, Binary} -> {ok, binary_to_term(Binary)};
-		_ -> error
+	{Base, Copy0, Copy1} = get_filenames(DB, ID),
+	Copy0Data =
+		case file:read_file(Copy0) of
+			{ok, Binary0} -> Binary0;
+			_ -> error
+		end,
+	Copy1Data =
+		case file:read_file(Copy1) of
+			{ok, Binary1} -> Binary1;
+			_ -> error
+		end,
+	BaseData =
+		case file:read_file(Base) of
+			{ok, BinaryB} -> BinaryB;
+			_ -> error
+		end,
+	case {Copy0Data, Copy1Data, BaseData} of
+		{error, error, error} -> error;
+		{error, error, ValidData} -> {ok, binary_to_term(ValidData)};
+		{error, Update1, _Old} -> {ok, binary_to_term(Update1)};
+		{Update0, Update1, Old} ->
+			case {Update0 == Update1, Update1 == Old, Update0 == Old} of
+				{true, _, _} -> {ok, binary_to_term(Update1)};
+				{_, true, _} -> {ok, binary_to_term(Update1)};
+				{_, _, 1} -> {ok, binary_to_term(Update0)}
+			end
 	end.
 
 -spec delete (atom(), ataxia_id:type()) -> ('ok' | 'error').
