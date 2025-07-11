@@ -46,7 +46,7 @@ request_lock (DB, ID, State) ->
 	case maps:find({DB, ID}, State) of
 		{ok, Result} -> {Result, State};
 		error ->
-			Result = ataxia_lock:new(),
+			Result = ataxia_lock:new(DB, ID),
 			NewState = maps:put({DB, ID}, Result, State),
 			{Result, NewState}
 	end.
@@ -79,8 +79,15 @@ code_change (_, State, _) ->
 format_status (_, [_, State]) ->
 	[{data, [{"State", State}]}].
 
-handle_info({'EXIT', _From, {none, {DB, ID, _PID}}}, State) ->
-	{noreply, maps:remove({DB, ID}, State)}.
+handle_info({'EXIT', _From, Reason}, State) ->
+	case Reason of
+		{DB, ID} -> {noreply, maps:remove({DB, ID}, State)};
+
+		_ -> {noreply, State}
+	end;
+handle_info(What, State) ->
+	{noreply, State}.
+
 
 %%%% Interface Functions
 -spec start () -> 'ok'.

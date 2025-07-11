@@ -35,6 +35,8 @@
 (
 	lock,
 	{
+		db :: atom(),
+		id :: ataxia_id:type(),
 		status :: category(),
 		timeout :: pid(),
 		queue :: queue:queue(request()),
@@ -81,7 +83,7 @@
 		release_lock/2,
 		release_lock/3,
 		has_lock/3,
-		new/0,
+		new/2,
 		timeout_process/1
 	]
 ).
@@ -154,11 +156,13 @@ timeout_process (Pid) ->
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% 'gen_server' functions
-init (_) ->
+init ([DB, ID]) ->
 	{
 		ok,
 		#lock
 		{
+			db = DB,
+			id = ID,
 			status = unlocked,
 			timeout = spawn(?MODULE, timeout_process, [self()]),
 			queue = queue:new(),
@@ -180,7 +184,7 @@ handle_cast (timeout, State) ->
 	case S0State#lock.status of
 		unlocked ->
 			S0State#lock.timeout ! stop,
-			{stop, timeout, S0State};
+			{stop, {shutdown, timeout}, {S0State#lock.db, S0State#lock.id}};
 
 		_ -> {noreply, S0State}
 	end;
@@ -245,7 +249,7 @@ handle_cast ({unlocked, ClientNode, ClientPID}, State) ->
 	case S1State#lock.status of
 		unlocked ->
 			S1State#lock.timeout ! stop,
-			{stop, timeout, S1State};
+			{stop, {shutdown, timeout}, {S1State#lock.db, S1State#lock.id}};
 
 		_ -> {noreply, S1State}
 	end.
@@ -261,8 +265,8 @@ format_status (_, [_, State]) ->
 handle_info(_, State) ->
 	{noreply, State}.
 
-new () ->
-	{ok, Result} = gen_server:start_link(?MODULE, [], []),
+new (DB, ID) ->
+	{ok, Result} = gen_server:start_link(?MODULE, [DB, ID], []),
 	Result.
 
 -spec has_lock (pid(), holder(), category()) -> boolean().
