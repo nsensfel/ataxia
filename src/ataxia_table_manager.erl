@@ -39,7 +39,7 @@
 new() ->
 	#manager
 	{
-		last_id = ataxia_id:manager_index(),
+		last_id = ataxia_id:table_manager(),
 		free_ids = []
 	}.
 

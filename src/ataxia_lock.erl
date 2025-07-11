@@ -52,7 +52,8 @@
 	[
 		type/0,
 		category/0,
-		message/0
+		message/0,
+		holder/0
 	]
 ).
 
@@ -73,7 +74,9 @@
 -export
 (
 	[
+		request/2,
 		request_lock/4,
+		request_lock/5,
 		release_lock/2,
 		release_lock/3,
 		has_lock/3,
@@ -264,6 +267,11 @@ new () ->
 has_lock (LockPID, Client, Mode) ->
 	gen_server:call(LockPID, {has_lock, Mode, Client}).
 
+-spec request (pid(), any()) -> 'ok'.
+request (LockPID, Request) ->
+	gen_server:cast(LockPID, Request),
+	ok.
+
 -spec request_lock (atom(), ataxia_id:type(), holder(), category()) -> holder().
 request_lock (DB, ID, Client, Mode) ->
 	LockPID = ataxia_lock_manager:request_lock_for(DB, ID, none),
@@ -271,6 +279,18 @@ request_lock (DB, ID, Client, Mode) ->
 	receive
 		{ataxia_reply, lock, granted} -> #holder{ node = node(), pid = LockPID }
 	end.
+
+-spec request_lock
+	(
+		atom(),
+		ataxia_id:type(),
+		node(),
+		pid(),
+		category()
+	)
+	-> holder().
+request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
+	request_lock(DB, ID, #holder{ node = ClientNode, pid = ClientPID }, Mode).
 
 -spec release_lock (pid(), holder()) -> 'ok'.
 release_lock (LockPID, Client) ->

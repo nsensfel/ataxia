@@ -30,7 +30,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec update_array_cell (non_neg_integer(), ataxic:basic()) -> ataxic:basic().
+-spec update_array_cell (non_neg_integer(), ataxic:type()) -> ataxic:type().
 update_array_cell (_IX, #current{}) -> nop();
 update_array_cell (IX, OP) ->
 	ataxic:apply_function
@@ -67,9 +67,9 @@ update_array_cell (IX, OP) ->
 -spec update_orddict_element
 	(
 		any(),
-		ataxic:basic()
+		ataxic:type()
 	)
-	-> ataxic:basic().
+	-> ataxic:type().
 update_orddict_element (_IX, #current{}) -> nop();
 update_orddict_element (IX, OP) ->
 	ataxic:apply_function
@@ -103,14 +103,14 @@ update_orddict_element (IX, OP) ->
 		]
 	).
 
--spec nop () -> ataxic:basic().
+-spec nop () -> ataxic:type().
 nop () -> ataxic:sequence([]).
 
 -spec update_ordset
 	(
 		ordsets:ordset(any()),
 		ordsets:ordset(any())
-	) -> ataxic:basic().
+	) -> ataxic:type().
 update_ordset (Old, New) ->
 	Remove = ordsets:subtract(Old, New),
 	Add = ordsets:subtract(New, Old),

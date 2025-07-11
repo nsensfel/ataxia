@@ -26,7 +26,8 @@
 		new/0,
 		request_lock/4,
 		release_lock/2,
-		release_all/1
+		release_all/1,
+		janitor/1
 	]
 ).
 
@@ -46,7 +47,7 @@ janitor (State) ->
 				State#state
 				{
 					locks =
-						set:add_element
+						sets:add_element
 						(
 							RemoteProcess,
 							State#state.locks
@@ -59,12 +60,12 @@ janitor (State) ->
 			(
 				State#state
 				{
-					locks = set:del_element(RemoteProcess, State#state.locks)
+					locks = sets:del_element(RemoteProcess, State#state.locks)
 				}
 			);
 
 		release_all ->
-			set:fold
+			sets:fold
 			(
 				fun ({Node, Pid}, _Acc) ->
 					release_lock(State#state.parent, Node, Pid)
@@ -72,10 +73,10 @@ janitor (State) ->
 				ok,
 				State#state.locks
 			),
-			janitor(State#state{ locks = set:new() });
+			janitor(State#state{ locks = sets:new() });
 
 		{'EXIT', _Pid, _State} ->
-			set:fold
+			sets:fold
 			(
 				fun ({Node, Pid}, _Acc) ->
 					release_lock(State#state.parent, Node, Pid)
@@ -93,8 +94,9 @@ janitor (State) ->
 new () ->
 	spawn_link
 	(
-		fun janitor/1,
-		[#state{ parent = self(), locks = set:new() }]
+		?MODULE,
+		janitor,
+		[#state{ parent = self(), locks = sets:new() }]
 	).
 
 -spec request_lock
@@ -110,6 +112,7 @@ request_lock (DB, ID, Mode, Janitor) ->
 		(
 			DB,
 			ID,
+			ataxia_lock,
 			request_lock,
 			[DB, ID, node(), self(), Mode]
 		),

@@ -10,7 +10,7 @@
 (
 	[
 		ensure_folder_exists/1,
-		store/3,
+		write/3,
 		read/2,
 		delete/2
 	]
@@ -41,8 +41,8 @@ ensure_folder_exists (DB) ->
 	ok = filelib:ensure_dir(DB),
 	ok.
 
--spec store (atom(), ataxia_id:type(), ataxia_entry:type()) -> 'ok'.
-store (DB, ID, Entry) ->
+-spec write (atom(), ataxia_id:type(), ataxia_entry:type()) -> 'ok'.
+write (DB, ID, Entry) ->
 	{Base, Copy0, Copy1} = get_filenames(DB, ID),
 
 	{Base, Copy0, Copy1} = get_filenames(DB, ID),
