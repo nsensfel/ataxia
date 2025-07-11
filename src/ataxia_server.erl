@@ -128,8 +128,10 @@ act_with_lock ({blind_update_then_fetch, DB, ID, Op}) ->
 			ataxia_database:write(DB, ID, S1Entry),
 			{
 				ok,
-				ataxia_entry:get_version(S1Entry),
-				ataxia_entry:get_value(S1Entry)
+				{
+					ataxia_entry:get_version(S1Entry),
+					ataxia_entry:get_value(S1Entry)
+				}
 			}
 	end;
 act_with_lock ({blind_remove, DB, ID}) ->
@@ -306,7 +308,7 @@ perform_with_lock (Client, DB, ID, {temp, write}, _Permission, Request) ->
 	Lock = request_lock(Client, DB, ID, LockRequest),
 	Output =
 		case act_with_lock(Request) of
-			{ok, Data} -> {ok, Lock, Data};
+			{ok, Data} -> {ok, Data};
 			{error, Error} -> {error, Error}
 		end,
 	ataxia_lock:release_lock(Lock, Client),

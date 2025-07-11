@@ -271,7 +271,7 @@ add (S0Client, DB, Lock, Value) ->
 				Value
 			);
 
-		Error -> {S1Client, Error}
+		Error -> erlang:display({add, error, Error}), {S1Client, Error}
 	end.
 
 %%%% BY ID %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
