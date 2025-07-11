@@ -8,6 +8,7 @@
 	manager,
 	{
 		last_id :: ataxia_id:type(),
+		last_counter_id :: ataxia_id:type(),
 		free_ids :: list(ataxia_id:type())
 	}
 ).
@@ -23,8 +24,10 @@
 	[
 		new/0,
 		none/0,
-		get_new_id/1,
-		release_id/2
+		get_last_id/1,
+		generate_id/1,
+		release_id/2,
+		ataxic_generate_id/0
 	]
 ).
 
@@ -39,26 +42,37 @@
 new() ->
 	#manager
 	{
+		last_counter_id = ataxia_id:table_manager(),
 		last_id = ataxia_id:table_manager(),
 		free_ids = []
 	}.
 
+-spec get_last_id (type()) -> ataxia_id:type().
+get_last_id (free) -> <<"">>;
+get_last_id (#manager{ last_id = Result }) -> Result.
+
 -spec none () -> type().
 none () -> free.
 
--spec get_new_id (type()) -> {ataxia_id:type(), type()}.
-get_new_id (free) -> {<<"">>, free};
-get_new_id (Manager) ->
+-spec generate_id (type()) -> type().
+generate_id (free) -> free;
+generate_id (Manager) ->
 	case Manager#manager.free_ids of
-		[A|B] -> {A, Manager#manager{ free_ids = B } };
+		[A|B] -> Manager#manager{ free_ids = B, last_id = A};
 
 		[] ->
 			NextID = ataxia_id:next(Manager#manager.last_id),
-			{
-				NextID,
-				Manager#manager{ last_id = NextID }
-			}
+			Manager#manager{ last_counter_id = NextID, last_id = NextID }
 	end.
+
+-spec ataxic_generate_id () -> ataxic:type().
+ataxic_generate_id () ->
+	ataxic:apply_function
+	(
+		?MODULE,
+		generate_id,
+		[ataxic:current_value()]
+	).
 
 -spec release_id (ataxia_id:type(), type()) -> type().
 release_id (_ID, free) -> free;

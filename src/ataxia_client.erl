@@ -30,6 +30,7 @@
 -export
 (
 	[
+		start_node_processes/0,
 		new/0,
 		merge/2 % merges 2 clients from 2 asynchronous calls.
 	]
@@ -174,6 +175,11 @@ remove_cache_entry (Key, Client) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec start_node_processes () -> 'ok'.
+start_node_processes () ->
+	ataxia_cache_manager:start_collection(),
+	ok.
+
 -spec new () -> type().
 new () ->
 	#client
@@ -244,8 +250,29 @@ add_at (Client, DB, ID, Lock, Value) ->
 			| ataxia_error:type()
 		)
 	}.
-add (Client, DB, Lock, Value) ->
-	request(Client, DB, ataxia_id:table_manager(), {add, DB, Lock, Value}).
+add (S0Client, DB, Lock, Value) ->
+	{ S1Client, Result } =
+		blind_update_then_fetch
+		(
+			S0Client,
+			DB,
+			ataxia_id:table_manager(),
+			{temp, write},
+			ataxia_table_manager:ataxic_generate_id()
+		),
+	case Result of
+		{ok, _Version, TableManager} ->
+			add_at
+			(
+				S1Client,
+				DB,
+				ataxia_table_manager:get_last_id(TableManager),
+				Lock,
+				Value
+			);
+
+		Error -> {S1Client, Error}
+	end.
 
 %%%% BY ID %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec fetch

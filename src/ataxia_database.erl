@@ -9,7 +9,7 @@
 -export
 (
 	[
-		ensure_folder_exists/1,
+		ensure_exists/1,
 		write/3,
 		read/2,
 		delete/2
@@ -33,16 +33,54 @@ get_filenames (DB, ID) ->
 	Copy1Filename = <<BaseFilename/binary, Copy1Suffix/binary>>,
 	{BaseFilename, Copy0Filename, Copy1Filename}.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec ensure_folder_exists (atom()) -> 'ok'.
 ensure_folder_exists (DB) ->
 	ok = filelib:ensure_dir(DB),
 	ok.
 
+-spec ensure_db_exists
+	(
+		ataxia_client:type(),
+		{atom(), ('free' | 'id')}
+	)
+	-> ataxia_client:type().
+ensure_db_exists (S0Client, {DB, Mode}) ->
+	{
+		S1Client,
+		_Output
+	} =
+		ataxia_client:add_at
+		(
+			S0Client,
+			DB,
+			ataxia_id:table_manager(),
+			{temp, write},
+			case Mode of
+				free -> free;
+				id -> ataxia_table_manager:new()
+			end
+		),
+	S1Client.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec ensure_exists (list({atom(), ('free' | 'id')})) -> 'ok'.
+ensure_exists (DBs) ->
+	Client = ataxia_client:new(),
+	lists:foldl
+	(
+		fun (DB, S0Client) ->
+			ensure_db_exists(S0Client, DB)
+		end,
+		Client,
+		DBs
+	),
+	ok.
+
 -spec write (atom(), ataxia_id:type(), ataxia_entry:type()) -> 'ok'.
 write (DB, ID, Entry) ->
+	ensure_folder_exists(DB),
 	{Base, Copy0, Copy1} = get_filenames(DB, ID),
 
 	{Base, Copy0, Copy1} = get_filenames(DB, ID),

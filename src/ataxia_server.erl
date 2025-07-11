@@ -11,6 +11,7 @@
 -export
 (
 	[
+		start_node_processes/0,
 		fetch/5,
 		blind_update/5,
 		safe_update/6,
@@ -21,7 +22,8 @@
 		blind_update_if/6,
 		blind_update_if_then_fetch/6,
 		blind_update_if_else_fetch/6,
-		blind_remove_if/5
+		blind_remove_if/5,
+		add_at/5
 	]
 ).
 
@@ -248,6 +250,14 @@ act_with_lock ({blind_remove_if, DB, ID, Cond}) ->
 
 				_ -> {error, condition}
 			end
+	end;
+act_with_lock ({add_at, DB, ID, Value}) ->
+	case ataxia_database:read(DB, ID) of
+		{ok, _Entry} -> {error, id};
+		error ->
+			InitialEntry = ataxia_entry:new(Value),
+			ataxia_database:write(DB, ID, InitialEntry),
+			{ok, ok}
 	end.
 
 -spec perform_with_lock
@@ -310,6 +320,11 @@ perform_with_lock (Client, _DB, _ID, LockRef, Permission, Request) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec start_node_processes () -> 'ok'.
+start_node_processes () ->
+	ataxia_lock_manager:start(),
+	ataxia_client:start_node_processes(),
+	ok.
 
 -spec fetch
 	(
@@ -524,5 +539,23 @@ blind_update_if_else_fetch (Client, DB, ID, Lock, Cond, Op) ->
 	).
 blind_remove_if (Client, DB, ID, Lock, Cond) ->
 	Request = {blind_remove_if, DB, ID, Cond},
+	Permission = write,
+	perform_with_lock(Client, DB, ID, Lock, Permission, Request).
+
+-spec add_at
+	(
+		ataxia_lock:holder(),
+		atom(),
+		ataxia_id:type(),
+		ataxia_lock:message(),
+		any()
+	)
+	->
+	(
+		'ok'
+		| ataxia_error:type()
+	).
+add_at (Client, DB, ID, Lock, Value) ->
+	Request = {add_at, DB, ID, Value},
 	Permission = write,
 	perform_with_lock(Client, DB, ID, Lock, Permission, Request).
