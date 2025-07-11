@@ -55,7 +55,9 @@ request_lock (DB, ID, State) ->
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%% 'gen_server' functions
-init (_) -> {ok, maps:new()}.
+init (_) ->
+	process_flag(trap_exit, true),
+	{ok, maps:new()}.
 
 handle_call ({request_lock, DB, ID, none}, _From, State) ->
 	{PID, NewState} = request_lock(DB, ID, State),
@@ -71,7 +73,9 @@ handle_call ({request_lock, DB, ID, CurrentPID}, _From, State) ->
 
 handle_cast (_Msg, State) -> {noreply, State}.
 
-terminate (_, _) -> ok.
+terminate (Reason, State) ->
+	erlang:display({"Lock Manager terminated:", Reason, State}),
+	ok.
 
 code_change (_, State, _) ->
 	{ok, State}.
@@ -81,11 +85,14 @@ format_status (_, [_, State]) ->
 
 handle_info({'EXIT', _From, Reason}, State) ->
 	case Reason of
-		{DB, ID} -> {noreply, maps:remove({DB, ID}, State)};
+		{shutdown, {DB, ID}} ->
+			erlang:display({"Lock Manager removing lock", DB, ID}),
+			{noreply, maps:remove({DB, ID}, State)};
 
 		_ -> {noreply, State}
 	end;
 handle_info(What, State) ->
+	erlang:display({"Lock Manager got other msg:", What, State}),
 	{noreply, State}.
 
 

@@ -26,7 +26,9 @@
 	)
 	-> {binary(), binary(), binary()}.
 get_filenames (DB, ID) ->
-	BaseFilename = filename:join(DB, ID),
+	{ok, CWD} = file:get_cwd(),
+	BaseDirectory = filename:join(CWD, DB),
+	BaseFilename = filename:join(BaseDirectory, ID),
 	Copy0Suffix = <<".0">>,
 	Copy1Suffix = <<".1">>,
 	Copy0Filename = <<BaseFilename/binary, Copy0Suffix/binary>>,
@@ -35,7 +37,9 @@ get_filenames (DB, ID) ->
 
 -spec ensure_folder_exists (atom()) -> 'ok'.
 ensure_folder_exists (DB) ->
-	ok = filelib:ensure_dir(DB),
+	{ok, CWD} = file:get_cwd(),
+	BaseDirectory = filename:join(CWD, DB),
+	ok = filelib:ensure_path(BaseDirectory),
 	ok.
 
 -spec ensure_db_exists
@@ -81,8 +85,6 @@ ensure_exists (DBs) ->
 -spec write (atom(), ataxia_id:type(), ataxia_entry:type()) -> 'ok'.
 write (DB, ID, Entry) ->
 	ensure_folder_exists(DB),
-	{Base, Copy0, Copy1} = get_filenames(DB, ID),
-
 	{Base, Copy0, Copy1} = get_filenames(DB, ID),
 	Copy0Data =
 		case file:read_file(Copy0) of
@@ -132,7 +134,7 @@ write (DB, ID, Entry) ->
 	end,
 
 	Data = term_to_binary(Entry),
-	file:write_file(Copy0, Data),
+	erlang:display({Copy0, file:write_file(Copy0, Data)}),
 	file:write_file(Copy1, Data),
 	file:write_file(Base, Data),
 

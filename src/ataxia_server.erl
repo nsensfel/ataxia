@@ -275,7 +275,7 @@ perform_with_lock (_Client, _DB, _ID, read, write, _Req) -> {error, lock};
 perform_with_lock (_C, _DB, _ID, {temp, read}, write, _Req) -> {error, lock};
 perform_with_lock (Client, DB, ID, read, read, Request) ->
 	LockRequest = {read, self(), Client},
-	{granted, Lock} = request_lock(Client, DB, ID, LockRequest),
+	Lock = request_lock(Client, DB, ID, LockRequest),
 	case act_with_lock(Request) of
 		{ok, Data} -> {ok, Lock, Data};
 		{error, Error} ->
@@ -284,7 +284,7 @@ perform_with_lock (Client, DB, ID, read, read, Request) ->
 	end;
 perform_with_lock (Client, DB, ID, write, _Permission, Request) ->
 	LockRequest = {write, self(), Client},
-	{granted, Lock} = request_lock(Client, DB, ID, LockRequest),
+	Lock = request_lock(Client, DB, ID, LockRequest),
 	case act_with_lock(Request) of
 		{ok, Data} -> {ok, Lock, Data};
 		{error, Error} ->
@@ -293,7 +293,7 @@ perform_with_lock (Client, DB, ID, write, _Permission, Request) ->
 	end;
 perform_with_lock (Client, DB, ID, {temp, read}, read, Request) ->
 	LockRequest = {read, self(), Client},
-	{granted, Lock} = request_lock(Client, DB, ID, LockRequest),
+	Lock = request_lock(Client, DB, ID, LockRequest),
 	Output =
 		case act_with_lock(Request) of
 			{ok, Data} -> {ok, Data};
@@ -303,7 +303,7 @@ perform_with_lock (Client, DB, ID, {temp, read}, read, Request) ->
 	Output;
 perform_with_lock (Client, DB, ID, {temp, write}, _Permission, Request) ->
 	LockRequest = {write, self(), Client},
-	{granted, Lock} = request_lock(Client, DB, ID, LockRequest),
+	Lock = request_lock(Client, DB, ID, LockRequest),
 	Output =
 		case act_with_lock(Request) of
 			{ok, Data} -> {ok, Lock, Data};

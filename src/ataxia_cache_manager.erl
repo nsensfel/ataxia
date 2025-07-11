@@ -11,7 +11,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--type state() :: dict:dict({atom(), ataxia_id:type()}, pid()).
+-type state() :: #{{atom(), ataxia_id:type()} := pid()}.
 -type collection() :: array:array(atom()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -47,19 +47,17 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% FIXME: tie cache entries to manager, so it gets notified of termination.
-%%%% FIXME: multiple cache managers according to ID modulo?
 -spec request_entry (atom(), ataxia_id:type(), state()) ->
 	{
 		pid(),
 		state()
 	}.
 request_entry (DB, ID, State) ->
-	case dict:find({DB, ID}, State) of
+	case maps:find({DB, ID}, State) of
 		{ok, Result} -> {Result, State};
 		error ->
 			Result = ataxia_cache_entry:start(),
-			NewState = dict:store({DB, ID}, Result, State),
+			NewState = maps:put({DB, ID}, Result, State),
 			{Result, NewState}
 	end.
 
@@ -80,25 +78,24 @@ generate_atom_from_index (IX) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTED FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% TODO: Client object for all client data (known cache lines, cache line manager
-%%%% references - fed at init).
-%%%% 'gen_server' functions
-init (_) -> {ok, dict:new()}.
+init (_) ->
+	process_flag(trap_exit, true),
+	{ok, maps:new()}.
 
 handle_call ({request_entry, DB, ID, none}, _From, State) ->
 	{PID, NewState} = request_entry(DB, ID, State),
 	{reply, PID, NewState};
 handle_call ({request_entry, DB, ID, CurrentPID}, _From, State) ->
 	{PID, NewState} =
-		case dict:find({DB, ID}, State) of
+		case maps:find({DB, ID}, State) of
 			{ok, OtherValue} when OtherValue /= CurrentPID -> {OtherValue, State};
-			_ -> request_entry(DB, ID, dict:erase({DB, ID}, State))
+			_ -> request_entry(DB, ID, maps:remove({DB, ID}, State))
 		end,
 
 	{reply, PID, NewState};
 handle_call ({peek_entry, DB, ID}, _From, State) ->
 	PID =
-		case dict:find({DB, ID}, State) of
+		case maps:find({DB, ID}, State) of
 			{ok, Value} -> Value;
 			_ -> none
 		end,
@@ -115,8 +112,17 @@ code_change (_, State, _) ->
 format_status (_, [_, State]) ->
 	[{data, [{"State", State}]}].
 
-handle_info({'EXIT', _From, {none, {DB, ID, _PID}}}, State) ->
-	{noreply, dict:erase({DB, ID}, State)}.
+handle_info({'EXIT', _From, Reason}, State) ->
+	case Reason of
+		{shutdown, {DB, ID}} ->
+			erlang:display({"Cache Manager removing entry", DB, ID}),
+			{noreply, maps:remove({DB, ID}, State)};
+
+		_ -> {noreply, State}
+	end;
+handle_info(What, State) ->
+	erlang:display({"Cache Manager got other msg:", What, State}),
+	{noreply, State}.
 
 %%%% Interface Functions
 -spec request_entry_for

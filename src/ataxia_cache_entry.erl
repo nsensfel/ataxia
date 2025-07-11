@@ -111,7 +111,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, Error),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -162,7 +162,7 @@ handle_cast
 				RequestID,
 				{error, Error}
 			),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -188,7 +188,7 @@ handle_cast
 			Error -> {error, Error}
 		end
 	),
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -226,7 +226,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -249,7 +249,7 @@ handle_cast
 	% Is this a good idea? Any case where it would be reasonable for
 	% the cache to have the wrong version number and the code the correct one?
 	reply_to(ReplyTo, RequestID, {error, version}),
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -286,7 +286,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -332,7 +332,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -352,7 +352,7 @@ handle_cast
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -376,7 +376,7 @@ handle_cast
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -390,7 +390,7 @@ handle_cast
 	% Is this a good idea? Any case where it would be reasonable for
 	% the cache to have the wrong version number and the code the correct one?
 	reply_to(ReplyTo, RequestID, {error, version}),
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -414,7 +414,7 @@ handle_cast
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -479,7 +479,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -507,7 +507,7 @@ handle_cast
 
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
 	end,
-	{stop, none, {DB, ID, self()}};
+	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
 (
 	{
@@ -538,7 +538,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -562,11 +562,11 @@ handle_cast
 	of
 		{ok, {updated, NewVersion}} ->
 			reply_to(ReplyTo, RequestID, {ok, updated, NewVersion}),
-			{stop, none, {DB, ID, self()}};
+			{stop, {shutdown, {DB, ID, self()}}, none};
 
 		{ok, NewLock, {updated, NewVersion}} ->
 			reply_to(ReplyTo, RequestID, {ok, updated, NewLock, NewVersion}),
-			{stop, none, {DB, ID, self()}};
+			{stop, {shutdown, {DB, ID, self()}}, none};
 
 		{ok, {fetch, Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, fetch, Version, Value}),
@@ -578,7 +578,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
 (
@@ -597,7 +597,7 @@ handle_cast
 	of
 		{ok, ok} ->
 			reply_to(ReplyTo, RequestID, ok),
-			{stop, none, {DB, ID, self()}};
+			{stop, {shutdown, {DB, ID, self()}}, none};
 
 		{error, condition} ->
 			reply_to(ReplyTo, RequestID, {error, condition}),
@@ -605,7 +605,7 @@ handle_cast
 
 		Error ->
 			reply_to(ReplyTo, RequestID, Error),
-			{stop, none, {DB, ID, self()}}
+			{stop, {shutdown, {DB, ID, self()}}, none}
 	end.
 
 handle_call (_Request, _From, State) ->

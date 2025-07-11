@@ -93,7 +93,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec grant (request(), category(), type()) -> type().
 grant (Request, Category, State) ->
-	Request#request.local_pid ! granted,
+	Request#request.local_pid ! {ataxia_reply, lock, granted},
 	State#lock
 	{
 		status = Category,
@@ -184,15 +184,15 @@ handle_cast (timeout, State) ->
 	case S0State#lock.status of
 		unlocked ->
 			S0State#lock.timeout ! stop,
-			{stop, {shutdown, timeout}, {S0State#lock.db, S0State#lock.id}};
+			{stop, {shutdown, {S0State#lock.db, S0State#lock.id}}, S0State};
 
 		_ -> {noreply, S0State}
 	end;
-handle_cast ({write, LocalPID, ClientNode, ClientPID}, State) ->
+handle_cast ({write, LocalPID, Client}, State) ->
 	Request =
 		#request
 		{
-			client = #holder{ pid = ClientPID, node = ClientNode},
+			client = Client,
 			local_pid = LocalPID,
 			is_write = true
 		},
@@ -202,18 +202,18 @@ handle_cast ({write, LocalPID, ClientNode, ClientPID}, State) ->
 			Request =
 				#request
 				{
-					client = #holder{ pid = ClientPID, node = ClientNode },
+					client = Client,
 					local_pid = LocalPID,
 					is_write = true
 				},
 			NewState = State#lock{ queue = queue:in(Request, State#lock.queue) },
 			{noreply, NewState}
 	end;
-handle_cast ({read, LocalPID, ClientNode, ClientPID}, State) ->
+handle_cast ({read, LocalPID, Client}, State) ->
 	Request =
 		#request
 		{
-			client = #holder{ pid = ClientPID, node = ClientNode },
+			client = Client,
 			local_pid = LocalPID,
 			is_write = false
 		},
@@ -235,10 +235,9 @@ handle_cast ({read, LocalPID, ClientNode, ClientPID}, State) ->
 					{noreply, NewState}
 			end
 	end;
-handle_cast ({unlocked, ClientNode, ClientPID}, State) ->
-	Holder = #holder{ node = ClientNode, pid = ClientPID },
+handle_cast ({unlocked, Client}, State) ->
 	S0State =
-		State#lock{ holders = sets:del_element(Holder, State#lock.holders) },
+		State#lock{ holders = sets:del_element(Client, State#lock.holders) },
 
 	S1State =
 		case sets:is_empty(S0State#lock.holders) of
@@ -249,12 +248,14 @@ handle_cast ({unlocked, ClientNode, ClientPID}, State) ->
 	case S1State#lock.status of
 		unlocked ->
 			S1State#lock.timeout ! stop,
-			{stop, {shutdown, timeout}, {S1State#lock.db, S1State#lock.id}};
+			{stop, {shutdown, {S1State#lock.db, S1State#lock.id}}, S1State};
 
 		_ -> {noreply, S1State}
 	end.
 
-terminate (_, _) -> ok.
+terminate (Reason, FinalState) ->
+	erlang:display({"Lock terminates.", Reason, FinalState}),
+	{{Reason, FinalState}, FinalState}.
 
 code_change (_, State, _) ->
 	{ok, State}.
