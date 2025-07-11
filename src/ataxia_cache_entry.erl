@@ -70,7 +70,7 @@ init (_) -> {ok, none}.
 % TODO: only use casts.
 handle_cast
 (
-	{request, _ReplyTo, _RequestID, {add, DB, Lock, Value}},
+	{request, ReplyTo, _RequestID, {add, DB, Lock, Value}},
 	State
 ) ->
 	case
@@ -80,7 +80,7 @@ handle_cast
 			ataxia_id:table_manager(),
 			ataxia_server,
 			add,
-			[DB, Lock, Value])
+			[ataxia_lock:create_holder(ReplyTo), DB, Lock, Value])
 	of
 		{ok, _ID} -> {noreply, State};
 		{ok, _ID, _NewLock} -> {noreply, State};
@@ -98,7 +98,8 @@ handle_cast
 			ataxia_id:table_manager(),
 			ataxia_server,
 			add_at,
-			[DB, ID, Lock, Value])
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Value]
+		)
 	of
 		{ok, Version} ->
 			reply_to(ReplyTo, RequestID, {ok, Version}),
@@ -119,8 +120,8 @@ handle_cast
 ) ->
 	Request =
 		case State of
-			none -> [DB, ID, Lock, none];
-			Entry -> [DB, ID, Lock, Entry#cache_entry.version]
+			none -> [ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, none];
+			Entry -> [ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Entry#cache_entry.version]
 		end,
 	case ataxia_network:call(DB, ID, ataxia_server, fetch, Request) of
 		{ok, ok} ->
@@ -179,7 +180,8 @@ handle_cast
 				ID,
 				ataxia_server,
 				blind_update,
-				[DB, ID, Lock, Op])
+				[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Op]
+			)
 		of
 			{ok, NewLock, NewVersion} -> {ok, NewLock, NewVersion};
 			{ok, NewVersion} -> {ok, NewVersion};
@@ -198,7 +200,7 @@ handle_cast
 	none
 ) ->
 	% Cache may have been freed. Still do update attempt.
-	Request = [DB, ID, Lock, ExpectedCurrentVersion, Op],
+	Request = [ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, ExpectedCurrentVersion, Op],
 	case ataxia_network:call(DB, ID, ataxia_server, safe_update, Request) of
 		{ok, NewLock, NewVersion} ->
 			reply_to(ReplyTo, RequestID, {ok, NewLock, NewVersion}),
@@ -258,7 +260,7 @@ handle_cast
 	},
 	_State
 ) ->
-	Request = [DB, ID, Lock, ExpectedCurrentVersion, Op],
+	Request = [ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, ExpectedCurrentVersion, Op],
 	case ataxia_network:call(DB, ID, ataxia_server, safe_update, Request) of
 		{ok, NewLock, NewVersion} ->
 			reply_to(ReplyTo, RequestID, {ok, NewLock, NewVersion}),
@@ -303,7 +305,7 @@ handle_cast
 			ID,
 			ataxia_server,
 			blind_update_then_fetch,
-			[DB, ID, Lock, Op]
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Op]
 		)
 	of
 		{ok, NewLock, {Version, Value}} ->
@@ -338,7 +340,14 @@ handle_cast
 	_State
 ) ->
 	case
-		ataxia_network:call(DB, ID, ataxia_server, blind_remove, [DB, ID, Lock])
+		ataxia_network:call
+		(
+			DB,
+			ID,
+			ataxia_server,
+			blind_remove,
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock]
+		)
 	of
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
 		Error -> reply_to(ReplyTo, RequestID, {error, Error})
@@ -361,7 +370,7 @@ handle_cast
 			ID,
 			ataxia_server,
 			safe_remove,
-			[DB, ID, Lock, ExpectedCurrentVersion]
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, ExpectedCurrentVersion]
 		)
 	of
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
@@ -399,7 +408,7 @@ handle_cast
 			ID,
 			ataxia_server,
 			safe_remove,
-			[DB, ID, Lock, ExpectedCurrentVersion]
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, ExpectedCurrentVersion]
 		)
 	of
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
@@ -418,8 +427,8 @@ handle_cast
 ) ->
 	Request =
 		case State of
-			none -> [DB, ID, Lock, none, Cond];
-			Entry -> [DB, ID, Lock, Entry#cache_entry.version, Cond]
+			none -> [ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, none, Cond];
+			Entry -> [ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Entry#cache_entry.version, Cond]
 		end,
 	case ataxia_network:call(DB, ID, ataxia_server, fetch_if, Request) of
 		{ok, ok} ->
@@ -483,7 +492,8 @@ handle_cast
 			DB,
 			ID,
 			ataxia_server,
-			blind_update_if, [DB, ID, Lock, Cond, Op]
+			blind_update_if,
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Cond, Op]
 		)
 	of
 		{ok, NewVersion} -> reply_to(ReplyTo, RequestID, {ok, NewVersion});
@@ -515,7 +525,7 @@ handle_cast
 			ID,
 			ataxia_server,
 			blind_update_if_then_fetch,
-			[DB, ID, Lock, Cond, Op]
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Cond, Op]
 		)
 	of
 		{ok, {Version, Value}} ->
@@ -547,7 +557,7 @@ handle_cast
 			ID,
 			ataxia_server,
 			blind_update_if_else_fetch,
-			[DB, Lock, ID, Cond, Op]
+			[ataxia_lock:create_holder(ReplyTo), DB, Lock, ID, Cond, Op]
 		)
 	of
 		{ok, {updated, NewVersion}} ->
@@ -582,7 +592,7 @@ handle_cast
 			ID,
 			ataxia_server,
 			blind_remove_if,
-			[DB, ID, Lock, Cond]
+			[ataxia_lock:create_holder(ReplyTo), DB, ID, Lock, Cond]
 		)
 	of
 		{ok, ok} ->
@@ -613,10 +623,10 @@ handle_info(_, State) ->
 	{noreply, State}.
 
 %%%% Interface Functions
--spec start () -> {'ok', pid()}.
+-spec start () -> pid().
 start () ->
 	{ok, PID} = gen_server:start_link(?MODULE, none, []),
-	{ok, PID}.
+	PID.
 
 -spec request
 (

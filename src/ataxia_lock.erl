@@ -74,6 +74,7 @@
 -export
 (
 	[
+		create_holder/1,
 		request/2,
 		request_lock/4,
 		request_lock/5,
@@ -261,7 +262,8 @@ handle_info(_, State) ->
 	{noreply, State}.
 
 new () ->
-	gen_server:start_link(?MODULE, [], []).
+	{ok, Result} = gen_server:start_link(?MODULE, [], []),
+	Result.
 
 -spec has_lock (pid(), holder(), category()) -> boolean().
 has_lock (LockPID, Client, Mode) ->
@@ -300,3 +302,6 @@ release_lock (LockPID, Client) ->
 -spec release_lock (pid(), node(), pid()) -> 'ok'.
 release_lock (LockPID, Node, PID) ->
 	release_lock(LockPID, #holder{ node = Node, pid = PID }).
+
+-spec create_holder (pid()) -> #holder{}.
+create_holder (PID) -> #holder { node = node(), pid = PID }.

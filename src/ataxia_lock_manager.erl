@@ -46,7 +46,7 @@ request_lock (DB, ID, State) ->
 	case maps:find({DB, ID}, State) of
 		{ok, Result} -> {Result, State};
 		error ->
-			Result = ataxia_cache_entry:start(),
+			Result = ataxia_lock:new(),
 			NewState = maps:put({DB, ID}, Result, State),
 			{Result, NewState}
 	end.
@@ -98,6 +98,6 @@ start () ->
 request_lock_for (DB, ID, CurrentPID) ->
 	gen_server:call
 	(
-		{local, ataxia_lock_manager},
+		ataxia_lock_manager,
 		{request_lock, DB, ID, CurrentPID}
 	).
