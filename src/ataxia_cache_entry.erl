@@ -10,6 +10,9 @@
 -module(ataxia_cache_entry).
 -behavior(gen_server).
 
+% 5min
+-define(CACHE_TIMEOUT, 300000).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -17,6 +20,8 @@
 (
 	cache_entry,
 	{
+		db :: atom(),
+		id :: ataxia_id:type(),
 		value :: any(),
 		version :: non_neg_integer()
 	}
@@ -63,29 +68,6 @@ reply_to (PID, RequestID, Reply) ->
 %%%% 'gen_server' functions
 init (_) -> {ok, none}.
 
-% TODO: all "none" return should end this cache line and report to the cache
-% manager.
-% TODO: all non-"none" return should have a timeout to end this cache line and
-% report to the cache manager.
-% TODO: only use casts.
-handle_cast
-(
-	{request, ReplyTo, _RequestID, {add, DB, Lock, Value}},
-	State
-) ->
-	case
-		ataxia_network:call
-		(
-			DB,
-			ataxia_id:table_manager(),
-			ataxia_server,
-			add,
-			[ataxia_lock:create_holder(ReplyTo), DB, Lock, Value])
-	of
-		{ok, _ID} -> {noreply, State};
-		{ok, _ID, _NewLock} -> {noreply, State};
-		Error -> {error, Error}
-	end;
 handle_cast
 (
 	{request, ReplyTo, RequestID, {add_at, DB, ID, Lock, Value}},
@@ -103,11 +85,31 @@ handle_cast
 	of
 		{ok, Version} ->
 			reply_to(ReplyTo, RequestID, {ok, Version}),
-			{noreply, #cache_entry{ version = Version, value = Value}};
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = Version,
+					value = Value
+				},
+				?CACHE_TIMEOUT
+			};
 
 		{ok, Lock, Version} ->
 			reply_to(ReplyTo, RequestID, {ok, Lock, Version}),
-			{noreply, #cache_entry{ version = Version, value = Value}};
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = Version,
+					value = Value
+				},
+				?CACHE_TIMEOUT
+			};
 
 		Error ->
 			reply_to(ReplyTo, RequestID, Error),
@@ -131,7 +133,7 @@ handle_cast
 				RequestID,
 				{ok, State#cache_entry.version, State#cache_entry.value}
 			),
-			{noreply, State};
+			{noreply, State, ?CACHE_TIMEOUT};
 
 		{ok, NewLock, ok} ->
 			reply_to
@@ -140,8 +142,7 @@ handle_cast
 				RequestID,
 				{ok, NewLock, State#cache_entry.version, State#cache_entry.value}
 			),
-			{noreply, State};
-
+			{noreply, State, ?CACHE_TIMEOUT};
 
 		{ok, NewLock, {NewVersion, NewValue}} ->
 			reply_to
@@ -152,7 +153,33 @@ handle_cast
 			),
 			{
 				noreply,
-				#cache_entry{ value = NewValue, version = NewVersion }
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = NewVersion,
+					value = NewValue
+				},
+				?CACHE_TIMEOUT
+			};
+
+		{ok, {NewVersion, NewValue}} ->
+			reply_to
+			(
+				ReplyTo,
+				RequestID,
+				{ok, NewVersion, NewValue}
+			),
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = NewVersion,
+					value = NewValue
+				},
+				?CACHE_TIMEOUT
 			};
 
 		Error ->
@@ -208,9 +235,12 @@ handle_cast
 				noreply,
 				#cache_entry
 				{
+					db = DB,
+					id = ID,
 					value = ExpectedNewValue,
 					version = NewVersion
-				}
+				},
+				?CACHE_TIMEOUT
 			};
 
 		{ok, NewVersion} ->
@@ -219,9 +249,12 @@ handle_cast
 				noreply,
 				#cache_entry
 				{
+					db = DB,
+					id = ID,
 					value = ExpectedNewValue,
 					version = NewVersion
-				}
+				},
+				?CACHE_TIMEOUT
 			};
 
 		Error ->
@@ -268,9 +301,12 @@ handle_cast
 				noreply,
 				#cache_entry
 				{
+					db = DB,
+					id = ID,
 					value = ExpectedNewValue,
 					version = NewVersion
-				}
+				},
+				?CACHE_TIMEOUT
 			};
 
 		{ok, NewVersion} ->
@@ -279,9 +315,12 @@ handle_cast
 				noreply,
 				#cache_entry
 				{
+					db = DB,
+					id = ID,
 					value = ExpectedNewValue,
 					version = NewVersion
-				}
+				},
+				?CACHE_TIMEOUT
 			};
 
 		Error ->
@@ -314,9 +353,12 @@ handle_cast
 				noreply,
 				#cache_entry
 				{
+					db = DB,
+					id = ID,
 					value = Value,
 					version = Version
-				}
+				},
+				?CACHE_TIMEOUT
 			};
 
 		{ok, {Version, Value}} ->
@@ -325,9 +367,12 @@ handle_cast
 				noreply,
 				#cache_entry
 				{
+					db = DB,
+					id = ID,
 					value = Value,
 					version = Version
-				}
+				},
+				?CACHE_TIMEOUT
 			};
 
 		Error ->
@@ -438,7 +483,7 @@ handle_cast
 				RequestID,
 				{ok, State#cache_entry.version, State#cache_entry.value}
 			),
-			{noreply, State};
+			{noreply, State, ?CACHE_TIMEOUT};
 
 		{ok, {NewVersion, NewValue}} ->
 			reply_to
@@ -449,7 +494,14 @@ handle_cast
 			),
 			{
 				noreply,
-				#cache_entry{ value = NewValue, version = NewVersion }
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					value = NewValue,
+					version = NewVersion
+				},
+				?CACHE_TIMEOUT
 			};
 
 		{ok, NewLock, ok} ->
@@ -459,7 +511,7 @@ handle_cast
 				RequestID,
 				{ok, NewLock, State#cache_entry.version, State#cache_entry.value}
 			),
-			{noreply, State};
+			{noreply, State, ?CACHE_TIMEOUT};
 
 		{ok, NewLock, {NewVersion, NewValue}} ->
 			reply_to
@@ -470,12 +522,19 @@ handle_cast
 			),
 			{
 				noreply,
-				#cache_entry{ value = NewValue, version = NewVersion }
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					value = NewValue,
+					version = NewVersion
+				},
+				?CACHE_TIMEOUT
 			};
 
 		{error, condition} ->
 			reply_to(ReplyTo, RequestID, {error, condition}),
-			{noreply, State};
+			{noreply, State, ?CACHE_TIMEOUT};
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
@@ -530,11 +589,31 @@ handle_cast
 	of
 		{ok, {Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, Version, Value}),
-			{noreply, #cache_entry{ version = Version, value = Value }};
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					value = Value,
+					version = Version
+				},
+				?CACHE_TIMEOUT
+			};
 
 		{ok, NewLock, {Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, NewLock, Version, Value}),
-			{noreply, #cache_entry{ version = Version, value = Value }};
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					value = Value,
+					version = Version
+				},
+				?CACHE_TIMEOUT
+			};
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
@@ -570,11 +649,31 @@ handle_cast
 
 		{ok, {fetch, Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, fetch, Version, Value}),
-			{noreply, #cache_entry{ version = Version, value = Value }};
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					value = Value,
+					version = Version
+				},
+				?CACHE_TIMEOUT
+			};
 
 		{ok, NewLock, {fetch, Version, Value}} ->
 			reply_to(ReplyTo, RequestID, {ok, fetch, NewLock, Version, Value}),
-			{noreply, #cache_entry{ version = Version, value = Value }};
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					value = Value,
+					version = Version
+				},
+				?CACHE_TIMEOUT
+			};
 
 		Error ->
 			reply_to(ReplyTo, RequestID, {error, Error}),
@@ -601,7 +700,7 @@ handle_cast
 
 		{error, condition} ->
 			reply_to(ReplyTo, RequestID, {error, condition}),
-			{noreply, State};
+			{noreply, State, ?CACHE_TIMEOUT};
 
 		Error ->
 			reply_to(ReplyTo, RequestID, Error),
@@ -609,7 +708,7 @@ handle_cast
 	end.
 
 handle_call (_Request, _From, State) ->
-	{noreply, State}.
+	{noreply, State, ?CACHE_TIMEOUT}.
 
 terminate (_, _) -> ok.
 
@@ -619,6 +718,18 @@ code_change (_, State, _) ->
 format_status (_, [_, State]) ->
 	[{data, [{"State", State}]}].
 
+handle_info(timeout, none) ->
+	{
+		stop,
+		{shutdown, {none, none, self()}},
+		none
+	};
+handle_info(timeout, State) ->
+	{
+		stop,
+		{shutdown, {State#cache_entry.db, State#cache_entry.id, self()}},
+		none
+	};
 handle_info(_, State) ->
 	{noreply, State}.
 

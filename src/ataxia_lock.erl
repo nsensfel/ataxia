@@ -1,6 +1,8 @@
 -module(ataxia_lock).
 -behavior(gen_server).
 
+-define(LOCK_TIMEOUT, 10000).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -147,7 +149,7 @@ timeout_process (Pid) ->
 	receive
 		ping -> timeout_process(Pid);
 		quit -> ok
-	after 10000 ->
+	after ?LOCK_TIMEOUT ->
 		gen_server:cast(Pid, timeout),
 		timeout_process(Pid)
 	end.
