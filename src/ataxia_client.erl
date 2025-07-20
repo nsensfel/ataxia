@@ -209,8 +209,6 @@ merge (ClientA, ClientB) ->
 	}.
 
 %%%% ADD NEW ELEMENT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% FIXME: we likely need a table containing the ID tracker of the other
-%%%% tables.
 %%%%
 %%%% Providing everything
 %%%%
@@ -250,7 +248,10 @@ add_at (Client, DB, ID, Lock, Value) ->
 			| ataxia_error:type()
 		)
 	}.
+add (_S0Client, _DB, read, _Value) -> {error, lock};
+add (_S0Client, _DB, {temp, read}, _Value) -> {error, lock};
 add (S0Client, DB, Lock, Value) ->
+	erlang:display("Add: BUTF..."),
 	{ S1Client, Result } =
 		blind_update_then_fetch
 		(
@@ -260,6 +261,7 @@ add (S0Client, DB, Lock, Value) ->
 			{temp, write},
 			ataxia_table_manager:ataxic_generate_id()
 		),
+	erlang:display("Add: AddAt..."),
 	case Result of
 		{ok, _Version, TableManager} ->
 			add_at
@@ -381,6 +383,7 @@ safe_update
 		)
 	}.
 blind_update_then_fetch (Client, DB, ID, Lock, Op) ->
+	erlang:display("BUTF: client call..."),
 	request
 	(
 		Client,

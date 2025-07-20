@@ -66,7 +66,4 @@ table_manager () -> <<"0">>.
 
 -spec mod (type(), non_neg_integer()) -> non_neg_integer().
 mod (ID, N) ->
-	case binary_to_integer(ID) rem N of
-		M when M < 0 -> -M;
-		O -> O
-	end.
+	binary:decode_unsigned(ID) rem N.

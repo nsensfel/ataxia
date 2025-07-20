@@ -18,7 +18,7 @@ ERLC ?= erlc
 ERLC_OPTS ?= -I $(INCLUDE_DIR)
 
 DIALYZER ?= dialyzer
-DIALYZER_OPTS ?= -I $(INCLUDE_DIR)
+DIALYZER_OPTS ?= --verbose -I $(INCLUDE_DIR)
 
 M4 ?= m4
 M4_OPTS ?=

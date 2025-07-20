@@ -8,25 +8,14 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -type category() :: unlocked | read | write.
 
--record
-(
-	holder,
-	{
-		node :: node(),
-		pid :: pid()
-	}
-).
-
--type holder() :: #holder{}.
-
--type message() :: holder() | category() | {'temp', category()}.
+-type message() :: ataxia_network:proc() | category() | {'temp', category()}.
 
 -record
 (
 	request,
 	{
 		is_write :: boolean(),
-		client :: holder(),
+		client :: ataxia_network:proc(),
 		local_pid :: pid()
 	}
 ).
@@ -42,7 +31,7 @@
 		status :: category(),
 		timeout :: pid(),
 		queue :: queue:queue(request()),
-		holders :: sets:set(holder())
+		holders :: sets:set(ataxia_network:proc())
 	}
 ).
 
@@ -56,8 +45,7 @@
 	[
 		type/0,
 		category/0,
-		message/0,
-		holder/0
+		message/0
 	]
 ).
 
@@ -78,7 +66,6 @@
 -export
 (
 	[
-		create_holder/1,
 		request/2,
 		request_lock/4,
 		request_lock/5,
@@ -182,6 +169,7 @@ handle_call ({has_lock, Mode, Holder}, _From, State) ->
 	{reply, Result, State}.
 
 handle_cast (timeout, State) ->
+	erlang:display("Lock handling timeout msg."),
 	S0State = timeout(State),
 	case S0State#lock.status of
 		unlocked ->
@@ -199,8 +187,11 @@ handle_cast ({write, LocalPID, Client}, State) ->
 			is_write = true
 		},
 	case State#lock.status of
-		unlocked -> {noreply, grant(Request, write, State)};
+		unlocked ->
+			erlang:display("Lock handling write access when unlocked."),
+			{noreply, grant(Request, write, State)};
 		_ ->
+			erlang:display("Lock handling write access when locked."),
 			Request =
 				#request
 				{
@@ -212,6 +203,7 @@ handle_cast ({write, LocalPID, Client}, State) ->
 			{noreply, NewState}
 	end;
 handle_cast ({read, LocalPID, Client}, State) ->
+	erlang:display("Lock handling read request msg."),
 	Request =
 		#request
 		{
@@ -238,6 +230,7 @@ handle_cast ({read, LocalPID, Client}, State) ->
 			end
 	end;
 handle_cast ({unlocked, Client}, State) ->
+	erlang:display("Lock handling unlock."),
 	S0State =
 		State#lock{ holders = sets:del_element(Client, State#lock.holders) },
 
@@ -249,6 +242,7 @@ handle_cast ({unlocked, Client}, State) ->
 
 	case S1State#lock.status of
 		unlocked ->
+			erlang:display("This shut down the lock."),
 			S1State#lock.timeout ! stop,
 			{stop, {shutdown, {S1State#lock.db, S1State#lock.id}}, S1State};
 
@@ -272,7 +266,7 @@ new (DB, ID) ->
 	{ok, Result} = gen_server:start_link(?MODULE, [DB, ID], []),
 	Result.
 
--spec has_lock (pid(), holder(), category()) -> boolean().
+-spec has_lock (pid(), ataxia_network:proc(), category()) -> boolean().
 has_lock (LockPID, Client, Mode) ->
 	gen_server:call(LockPID, {has_lock, Mode, Client}).
 
@@ -281,12 +275,12 @@ request (LockPID, Request) ->
 	gen_server:cast(LockPID, Request),
 	ok.
 
--spec request_lock (atom(), ataxia_id:type(), holder(), category()) -> holder().
+-spec request_lock (atom(), ataxia_id:type(), ataxia_network:proc(), category()) -> ataxia_network:proc().
 request_lock (DB, ID, Client, Mode) ->
 	LockPID = ataxia_lock_manager:request_lock_for(DB, ID, none),
 	gen_server:cast(LockPID, {Mode, self(), Client}),
 	receive
-		{ataxia_reply, lock, granted} -> #holder{ node = node(), pid = LockPID }
+		{ataxia_reply, lock, granted} -> {node(), LockPID}
 	end.
 
 -spec request_lock
@@ -297,18 +291,20 @@ request_lock (DB, ID, Client, Mode) ->
 		pid(),
 		category()
 	)
-	-> holder().
+	-> ataxia_network:proc().
 request_lock (DB, ID, ClientNode, ClientPID, Mode) ->
-	request_lock(DB, ID, #holder{ node = ClientNode, pid = ClientPID }, Mode).
+	request_lock(DB, ID, {ClientNode, ClientPID}, Mode).
 
--spec release_lock (pid(), holder()) -> 'ok'.
+-spec release_lock ((pid() | ataxia_network:proc()), ataxia_network:proc()) -> 'ok'.
+release_lock ({ _Node, LockPID }, Client) ->
+	erlang:display("Releasing lock from network process."),
+	gen_server:cast(LockPID, {unlocked, Client}),
+	ok;
 release_lock (LockPID, Client) ->
+	erlang:display({"Releasing lock from PID.", LockPID}),
 	gen_server:cast(LockPID, {unlocked, Client}),
 	ok.
 
 -spec release_lock (pid(), node(), pid()) -> 'ok'.
 release_lock (LockPID, Node, PID) ->
-	release_lock(LockPID, #holder{ node = Node, pid = PID }).
-
--spec create_holder (pid()) -> #holder{}.
-create_holder (PID) -> #holder { node = node(), pid = PID }.
+	release_lock(LockPID, {Node, PID}).

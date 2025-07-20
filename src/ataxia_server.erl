@@ -32,31 +32,34 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec await_lock_reply
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		any(),
 		pid()
 	)
-	-> any().
+	-> pid().
 await_lock_reply (Client, DB, ID, Request, LockPID) ->
+	erlang:display("Waiting lock reply."),
 	receive
-		{ataxia_reply, lock, Reply} -> Reply
+		{ataxia_reply, lock, granted} -> LockPID
 	after ?TIMEOUT ->
 		request_new_lock_handler_of(Client, DB, ID, Request, LockPID)
 	end.
 
 -spec request_new_lock_handler_of
 (
-	ataxia_lock:holder(),
+	ataxia_network:proc(),
 	atom(),
 	ataxia_id:type(),
 	any(),
 	(pid() | none)
 )
--> any().
+-> pid().
 request_new_lock_handler_of (Client, DB, ID, Request, LockPID) ->
+	erlang:display("Req lock from manager."),
 	NewLockPID = ataxia_lock_manager:request_lock_for(DB, ID, LockPID),
+	erlang:display("Req access from lock."),
 	ataxia_lock:request(NewLockPID, Request),
 	case is_process_alive(NewLockPID) of
 		true -> await_lock_reply(Client, DB, ID, Request, NewLockPID);
@@ -65,12 +68,12 @@ request_new_lock_handler_of (Client, DB, ID, Request, LockPID) ->
 
 -spec request_lock
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		any()
 	)
-	-> any().
+	-> pid().
 request_lock (Client, DB, ID, Request) ->
 	request_new_lock_handler_of(Client, DB, ID, Request, none).
 
@@ -116,6 +119,7 @@ act_with_lock ({safe_update, DB, ID, ExpectedVersion, Op}) ->
 			end
 	end;
 act_with_lock ({blind_update_then_fetch, DB, ID, Op}) ->
+	erlang:display("BUTF: read..."),
 	case ataxia_database:read(DB, ID) of
 		error -> {error, id};
 		{ok, S0Entry} ->
@@ -125,6 +129,7 @@ act_with_lock ({blind_update_then_fetch, DB, ID, Op}) ->
 					ataxic:apply_to(Op, ataxia_entry:get_value(S0Entry)),
 					S0Entry
 				),
+			erlang:display("BUTF: write..."),
 			ataxia_database:write(DB, ID, S1Entry),
 			{
 				ok,
@@ -264,7 +269,7 @@ act_with_lock ({add_at, DB, ID, Value}) ->
 
 -spec perform_with_lock
 (
-	ataxia_lock:holder(),
+	ataxia_network:proc(),
 	atom(),
 	ataxia_id:type(),
 	ataxia_lock:message(),
@@ -279,16 +284,17 @@ perform_with_lock (Client, DB, ID, read, read, Request) ->
 	LockRequest = {read, self(), Client},
 	Lock = request_lock(Client, DB, ID, LockRequest),
 	case act_with_lock(Request) of
-		{ok, Data} -> {ok, Lock, Data};
+		{ok, Data} -> {ok, {node(), Lock}, Data};
 		{error, Error} ->
 			ataxia_lock:release_lock(Lock, Client),
 			{error, Error}
 	end;
 perform_with_lock (Client, DB, ID, write, _Permission, Request) ->
 	LockRequest = {write, self(), Client},
+	erlang:display("write Lock Request...."),
 	Lock = request_lock(Client, DB, ID, LockRequest),
 	case act_with_lock(Request) of
-		{ok, Data} -> {ok, Lock, Data};
+		{ok, Data} -> {ok, {node(), Lock}, Data};
 		{error, Error} ->
 			ataxia_lock:release_lock(Lock, Client),
 			{error, Error}
@@ -305,6 +311,7 @@ perform_with_lock (Client, DB, ID, {temp, read}, read, Request) ->
 	Output;
 perform_with_lock (Client, DB, ID, {temp, write}, _Permission, Request) ->
 	LockRequest = {write, self(), Client},
+	erlang:display("temp write Lock Request...."),
 	Lock = request_lock(Client, DB, ID, LockRequest),
 	Output =
 		case act_with_lock(Request) of
@@ -330,7 +337,7 @@ start_node_processes () ->
 
 -spec fetch
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -339,9 +346,9 @@ start_node_processes () ->
 	->
 	(
 		'ok'
-		| {'ok', ataxia_lock:holder()}
+		| {'ok', ataxia_network:proc()}
 		| {'ok', {non_neg_integer(), any()}}
-		| {'ok', ataxia_lock:holder(), {non_neg_integer(), any()}}
+		| {'ok', ataxia_network:proc(), {non_neg_integer(), any()}}
 		| ataxia_error:type()
 	).
 fetch (Client, DB, ID, Lock, Version) ->
@@ -351,7 +358,7 @@ fetch (Client, DB, ID, Lock, Version) ->
 
 -spec blind_update
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -359,7 +366,7 @@ fetch (Client, DB, ID, Lock, Version) ->
 	)
 	->
 	(
-		{'ok', ataxia_lock:holder(), non_neg_integer()}
+		{'ok', ataxia_network:proc(), non_neg_integer()}
 		| {'ok', non_neg_integer()}
 		| ataxia_error:type()
 	).
@@ -370,7 +377,7 @@ blind_update (Client, DB, ID, Lock, Op) ->
 
 -spec safe_update
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -379,7 +386,7 @@ blind_update (Client, DB, ID, Lock, Op) ->
 	)
 	->
 	(
-		{'ok', ataxia_lock:holder(), non_neg_integer()}
+		{'ok', ataxia_network:proc(), non_neg_integer()}
 		| {'ok', non_neg_integer()}
 		| ataxia_error:type()
 	).
@@ -390,7 +397,7 @@ safe_update (Client, DB, ID, Lock, ExpectedVersion, Op) ->
 
 -spec blind_update_then_fetch
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -398,18 +405,19 @@ safe_update (Client, DB, ID, Lock, ExpectedVersion, Op) ->
 	)
 	->
 	(
-		{'ok', ataxia_lock:holder(), {non_neg_integer(), any()}}
+		{'ok', ataxia_network:proc(), {non_neg_integer(), any()}}
 		| {'ok', {non_neg_integer(), any()}}
 		| ataxia_error:type()
 	).
 blind_update_then_fetch (Client, DB, ID, Lock, Op) ->
+	erlang:display("BUTF: Server received."),
 	Request = {blind_update_then_fetch, DB, ID, Op},
 	Permission = write,
 	perform_with_lock(Client, DB, ID, Lock, Permission, Request).
 
 -spec blind_remove
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message()
@@ -426,7 +434,7 @@ blind_remove (Client, DB, ID, Lock) ->
 
 -spec safe_remove
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -444,7 +452,7 @@ safe_remove (Client, DB, ID, Lock, Version) ->
 
 -spec fetch_if
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -454,9 +462,9 @@ safe_remove (Client, DB, ID, Lock, Version) ->
 	->
 	(
 		'ok'
-		| {'ok', ataxia_lock:holder()}
+		| {'ok', ataxia_network:proc()}
 		| {'ok', {non_neg_integer(), any()}}
-		| {'ok', ataxia_lock:holder(), {non_neg_integer(), any()}}
+		| {'ok', ataxia_network:proc(), {non_neg_integer(), any()}}
 		| ataxia_error:type()
 	).
 fetch_if (Client, DB, ID, Lock, Version, Cond) ->
@@ -466,7 +474,7 @@ fetch_if (Client, DB, ID, Lock, Version, Cond) ->
 
 -spec blind_update_if
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -476,7 +484,7 @@ fetch_if (Client, DB, ID, Lock, Version, Cond) ->
 	->
 	(
 		{'ok', non_neg_integer()}
-		| {'ok', ataxia_lock:holder(), non_neg_integer()}
+		| {'ok', ataxia_network:proc(), non_neg_integer()}
 		| ataxia_error:type()
 	).
 blind_update_if (Client, DB, ID, Lock, Cond, Op) ->
@@ -486,7 +494,7 @@ blind_update_if (Client, DB, ID, Lock, Cond, Op) ->
 
 -spec blind_update_if_then_fetch
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -496,7 +504,7 @@ blind_update_if (Client, DB, ID, Lock, Cond, Op) ->
 	->
 	(
 		{'ok', {non_neg_integer(), any()}}
-		| {'ok', ataxia_lock:holder(), {non_neg_integer(), any()}}
+		| {'ok', ataxia_network:proc(), {non_neg_integer(), any()}}
 		| ataxia_error:type()
 	).
 blind_update_if_then_fetch (Client, DB, ID, Lock, Cond, Op) ->
@@ -506,7 +514,7 @@ blind_update_if_then_fetch (Client, DB, ID, Lock, Cond, Op) ->
 
 -spec blind_update_if_else_fetch
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -516,9 +524,9 @@ blind_update_if_then_fetch (Client, DB, ID, Lock, Cond, Op) ->
 	->
 	(
 		{'ok', {'updated', non_neg_integer()}}
-		| {'ok',  ataxia_lock:holder(), {'updated', non_neg_integer()}}
+		| {'ok', ataxia_network:proc(), {'updated', non_neg_integer()}}
 		| {'ok', {'fetch', non_neg_integer(), any()}}
-		| {'ok', ataxia_lock:holder(), {'fetch', non_neg_integer(), any()}}
+		| {'ok', ataxia_network:proc(), {'fetch', non_neg_integer(), any()}}
 		| ataxia_error:type()
 	).
 blind_update_if_else_fetch (Client, DB, ID, Lock, Cond, Op) ->
@@ -528,7 +536,7 @@ blind_update_if_else_fetch (Client, DB, ID, Lock, Cond, Op) ->
 
 -spec blind_remove_if
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
@@ -546,7 +554,7 @@ blind_remove_if (Client, DB, ID, Lock, Cond) ->
 
 -spec add_at
 	(
-		ataxia_lock:holder(),
+		ataxia_network:proc(),
 		atom(),
 		ataxia_id:type(),
 		ataxia_lock:message(),
