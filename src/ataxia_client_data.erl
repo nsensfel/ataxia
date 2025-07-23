@@ -15,7 +15,7 @@
 		value :: any(),
 		version :: non_neg_integer(),
 		updates :: list(ataxic:type()),
-		lock :: ataxia_lock_janitor:lock_reference()
+		lock :: ataxia_network:proc()
 	}
 ).
 
@@ -52,7 +52,7 @@
 	(
 		atom(),
 		ataxia_id:type(),
-		ataxia_lock_janitor:lock_reference(),
+		ataxia_network:proc(),
 		non_neg_integer(),
 		any()
 	)
@@ -82,7 +82,7 @@ get_database (#data{ db = Result }) -> Result.
 -spec get_id (type()) -> ataxia_id:type().
 get_id (#data{ id = Result }) -> Result.
 
--spec get_lock (type()) -> ataxia_lock_janitor:lock_reference().
+-spec get_lock (type()) -> ataxia_network:proc().
 get_lock (#data{ lock = Result }) -> Result.
 
 -spec get_value (type()) -> any().

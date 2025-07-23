@@ -86,6 +86,7 @@ await_reply (Client, DB, ID, Request, EntryPID, RequestID) ->
 		{ataxia_reply, ReplyToID, Reply} when ReplyToID == RequestID ->
 			{Client, Reply}
 	after ?TIMEOUT ->
+		erlang:display({"Cache entry answer timed out", DB, ID}),
 		request_new_handler_of(Client, DB, ID, Request, EntryPID)
 	end.
 
@@ -107,9 +108,9 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 			ID,
 			EntryPID
 		),
-	ataxia_cache_entry:request(NewEntryPID, 0, Request),
 	case is_process_alive(NewEntryPID) of
 		true ->
+			ataxia_cache_entry:request(NewEntryPID, 0, Request),
 			await_reply
 			(
 				Client#client
@@ -129,7 +130,9 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 				0
 			);
 
-		false -> request_new_handler_of(Client, DB, ID, Request, NewEntryPID)
+		false ->
+			erlang:display({"Known cache entry is down", DB, ID}),
+			request_new_handler_of(Client, DB, ID, Request, NewEntryPID)
 	end.
 
 -spec request
@@ -225,7 +228,7 @@ merge (ClientA, ClientB) ->
 		type(),
 		(
 			{'ok', non_neg_integer()}
-			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| {'ok', ataxia_network:proc(), non_neg_integer()}
 			| ataxia_error:type()
 		)
 	}.
@@ -243,13 +246,13 @@ add_at (Client, DB, ID, Lock, Value) ->
 	{
 		type(),
 		(
-			{'ok', ataxia_id:type()}
-			| {'ok', ataxia_lock_janitor:lock_reference(), ataxia_id:type()}
+			{'ok', ataxia_id:type(), non_neg_integer()}
+			| {'ok', ataxia_id:type(), ataxia_network:proc(), non_neg_integer()}
 			| ataxia_error:type()
 		)
 	}.
-add (_S0Client, _DB, read, _Value) -> {error, lock};
-add (_S0Client, _DB, {temp, read}, _Value) -> {error, lock};
+add (S0Client, _DB, read, _Value) -> {S0Client, {error, lock}};
+add (S0Client, _DB, {temp, read}, _Value) -> {S0Client, {error, lock}};
 add (S0Client, DB, Lock, Value) ->
 	erlang:display("Add: BUTF..."),
 	{ S1Client, Result } =
@@ -264,14 +267,14 @@ add (S0Client, DB, Lock, Value) ->
 	erlang:display("Add: AddAt..."),
 	case Result of
 		{ok, _Version, TableManager} ->
-			add_at
-			(
-				S1Client,
-				DB,
-				ataxia_table_manager:get_last_id(TableManager),
-				Lock,
-				Value
-			);
+			NewID = ataxia_table_manager:get_last_id(TableManager),
+			case add_at(S1Client, DB, NewID, Lock, Value) of
+				{S2Client, {ok, Version}} -> {S2Client, {ok, NewID, Version}};
+				{S2Client, {ok, LockReply, Version}} ->
+					{S2Client, {ok, NewID, LockReply, Version}};
+
+				Other -> Other
+			end;
 
 		Error -> erlang:display({add, error, Error}), {S1Client, Error}
 	end.
@@ -292,7 +295,7 @@ add (S0Client, DB, Lock, Value) ->
 			|
 			{
 				'ok',
-				ataxia_lock_janitor:lock_reference(),
+				ataxia_network:proc(),
 				non_neg_integer(),
 				any()
 			}
@@ -315,7 +318,7 @@ fetch (Client, DB, ID, Lock) ->
 		type(),
 		(
 			{'ok', non_neg_integer()}
-			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| {'ok', ataxia_network:proc(), non_neg_integer()}
 			| ataxia_error:type()
 		)
 	}.
@@ -337,7 +340,7 @@ blind_update (Client, DB, ID, Lock, Op) ->
 		type(),
 		(
 			{'ok', non_neg_integer()}
-			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| {'ok', ataxia_network:proc(), non_neg_integer()}
 			| ataxia_error:type()
 		)
 	}.
@@ -375,7 +378,7 @@ safe_update
 			|
 			{
 				'ok',
-				ataxia_lock_janitor:lock_reference(),
+				ataxia_network:proc(),
 				non_neg_integer(),
 				any()
 			}
@@ -448,7 +451,7 @@ safe_remove (Client, DB, ID, Lock, ExpectedCurrentVersion) ->
 			|
 			{
 				'ok',
-				ataxia_lock_janitor:lock_reference(),
+				ataxia_network:proc(),
 				non_neg_integer(),
 				any()
 			}
@@ -472,7 +475,7 @@ fetch_if (Client, DB, ID, Lock, Cond) ->
 		type(),
 		(
 			{'ok', non_neg_integer()}
-			| {'ok', ataxia_lock_janitor:lock_reference(), non_neg_integer()}
+			| {'ok', ataxia_network:proc(), non_neg_integer()}
 			| ataxia_error:type()
 		)
 	}.
@@ -496,7 +499,7 @@ blind_update_if (Client, DB, ID, Lock, Cond, Op) ->
 			|
 			{
 				'ok',
-				ataxia_lock_janitor:lock_reference(),
+				ataxia_network:proc(),
 				non_neg_integer(),
 				any()
 			}
@@ -528,7 +531,7 @@ blind_update_if_then_fetch (Client, DB, ID, Lock, Cond, Op) ->
 			{
 				'ok',
 				'updated',
-				ataxia_lock_janitor:lock_reference(),
+				ataxia_network:proc(),
 				non_neg_integer()
 			}
 			| {'ok', 'updated', non_neg_integer()}
@@ -537,7 +540,7 @@ blind_update_if_then_fetch (Client, DB, ID, Lock, Cond, Op) ->
 			{
 				'ok',
 				'fetch',
-				ataxia_lock_janitor:lock_reference(),
+				ataxia_network:proc(),
 				non_neg_integer(),
 				any()
 			}

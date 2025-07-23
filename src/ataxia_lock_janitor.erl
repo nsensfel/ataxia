@@ -3,20 +3,18 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TYPES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--type lock_reference() :: {node(), pid()}.
-
 -record
 (
 	state,
 	{
 		parent :: pid(),
-		locks :: sets:set(lock_reference())
+		locks :: sets:set(ataxia_network:proc())
 	}
 ).
 
 -type type() :: pid().
 
--export_type([type/0, lock_reference/0]).
+-export_type([type/0]).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EXPORTS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -105,7 +103,7 @@ new () ->
 	ataxia_id:type(),
 	('write' | 'read'),
 	pid()
-) -> ({ok, lock_reference()} | {error, any()}).
+) -> ({ok, ataxia_network:proc()} | {error, any()}).
 request_lock (DB, ID, Mode, Janitor) ->
 	Result =
 		ataxia_network:call
@@ -122,7 +120,7 @@ request_lock (DB, ID, Mode, Janitor) ->
 	end,
 	Result.
 
--spec release_lock (lock_reference(), pid()) -> ok.
+-spec release_lock (ataxia_network:proc(), pid()) -> ok.
 release_lock ({LockNode, LockPid}, Janitor) ->
 	release_lock(self(), LockNode, LockPid),
 	Janitor ! {remove, {LockNode, LockPid}},

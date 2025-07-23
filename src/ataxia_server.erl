@@ -264,7 +264,7 @@ act_with_lock ({add_at, DB, ID, Value}) ->
 		error ->
 			InitialEntry = ataxia_entry:new(Value),
 			ataxia_database:write(DB, ID, InitialEntry),
-			{ok, ok}
+			{ok, ataxia_entry:get_version(InitialEntry)}
 	end.
 
 -spec perform_with_lock
@@ -276,10 +276,18 @@ act_with_lock ({add_at, DB, ID, Value}) ->
 	ataxia_lock:category(),
 	any()
 ) -> any().
-perform_with_lock (_Client, _DB, _ID, unlocked, _Perm, _Req) -> {error, lock};
-perform_with_lock (_C, _DB, _ID, {temp, unlocked}, _P, _R) -> {error, lock};
-perform_with_lock (_Client, _DB, _ID, read, write, _Req) -> {error, lock};
-perform_with_lock (_C, _DB, _ID, {temp, read}, write, _Req) -> {error, lock};
+perform_with_lock (_Client, _DB, _ID, unlocked, _Perm, Req) ->
+	erlang:display({"[W] Invalid lock request (unlocked) for ", Req}),
+	{error, lock};
+perform_with_lock (_C, _DB, _ID, {temp, unlocked}, _P, Req) ->
+	erlang:display({"[W] Invalid lock request (temp unlocked) for ", Req}),
+	{error, lock};
+perform_with_lock (_Client, _DB, _ID, read, write, Req) ->
+	erlang:display({"[W] Invalid lock request (read) for ", Req}),
+	{error, lock};
+perform_with_lock (_C, _DB, _ID, {temp, read}, write, Req) ->
+	erlang:display({"[W] Invalid lock request (temp read) for ", Req}),
+	{error, lock};
 perform_with_lock (Client, DB, ID, read, read, Request) ->
 	LockRequest = {read, self(), Client},
 	Lock = request_lock(Client, DB, ID, LockRequest),

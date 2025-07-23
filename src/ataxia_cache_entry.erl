@@ -183,12 +183,7 @@ handle_cast
 			};
 
 		Error ->
-			reply_to
-			(
-				ReplyTo,
-				RequestID,
-				{error, Error}
-			),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
@@ -212,7 +207,7 @@ handle_cast
 		of
 			{ok, NewLock, NewVersion} -> {ok, NewLock, NewVersion};
 			{ok, NewVersion} -> {ok, NewVersion};
-			Error -> {error, Error}
+			Error -> Error
 		end
 	),
 	{stop, {shutdown, {DB, ID, self()}}, none};
@@ -258,7 +253,7 @@ handle_cast
 			};
 
 		Error ->
-			reply_to(ReplyTo, RequestID, {error, Error}),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
@@ -324,7 +319,7 @@ handle_cast
 			};
 
 		Error ->
-			reply_to(ReplyTo, RequestID, {error, Error}),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
@@ -377,7 +372,7 @@ handle_cast
 			};
 
 		Error ->
-			reply_to(ReplyTo, RequestID, {error, Error}),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
@@ -396,7 +391,7 @@ handle_cast
 		)
 	of
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
-		Error -> reply_to(ReplyTo, RequestID, {error, Error})
+		Error -> reply_to(ReplyTo, RequestID, Error)
 	end,
 	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
@@ -420,7 +415,7 @@ handle_cast
 		)
 	of
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
-		Error -> reply_to(ReplyTo, RequestID, {error, Error})
+		Error -> reply_to(ReplyTo, RequestID, Error)
 	end,
 	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
@@ -458,7 +453,7 @@ handle_cast
 		)
 	of
 		{ok, ok} -> reply_to(ReplyTo, RequestID, ok);
-		Error -> reply_to(ReplyTo, RequestID, {error, Error})
+		Error -> reply_to(ReplyTo, RequestID, Error)
 	end,
 	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
@@ -538,7 +533,7 @@ handle_cast
 			{noreply, State, ?CACHE_TIMEOUT};
 
 		Error ->
-			reply_to(ReplyTo, RequestID, {error, Error}),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
@@ -565,7 +560,7 @@ handle_cast
 				{ok, NewLock, NewVersion}
 			);
 
-		Error -> reply_to(ReplyTo, RequestID, {error, Error})
+		Error -> reply_to(ReplyTo, RequestID, Error)
 	end,
 	{stop, {shutdown, {DB, ID, self()}}, none};
 handle_cast
@@ -617,7 +612,7 @@ handle_cast
 			};
 
 		Error ->
-			reply_to(ReplyTo, RequestID, {error, Error}),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
@@ -677,7 +672,7 @@ handle_cast
 			};
 
 		Error ->
-			reply_to(ReplyTo, RequestID, {error, Error}),
+			reply_to(ReplyTo, RequestID, Error),
 			{stop, {shutdown, {DB, ID, self()}}, none}
 	end;
 handle_cast
