@@ -53,8 +53,9 @@
 		blind_update_if/6,
 		blind_update_if_then_fetch/6,
 		blind_update_if_else_fetch/6,
-		blind_remove_if/5
+		blind_remove_if/5,
 
+		release_lock/1
 		% TODO any_where, all_where variants.
 %		fetch_any/3,
 %		update_any/4,
@@ -663,3 +664,6 @@ blind_remove_if (Client, DB, ID, Lock, Cond) ->
 %blind_remove_all (Client, DB, Condition) ->
 %	% TODO: Try all nodes one by one, apply to all the matching entries.
 %	unimplemented.
+-spec release_lock (ataxia_network:proc()) -> 'ok'.
+release_lock ({LockNode, LockPID}) ->
+	erpc:cast(LockNode, ataxia_lock, release_lock, [LockPID, {node(), self()}]).

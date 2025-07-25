@@ -34,7 +34,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec release_lock (pid(), node(), pid()) -> ok.
 release_lock (ParentPID, LockNode, LockPid) ->
-	erpc:cast(LockNode, ataxia_lock, release_lock, [node(), ParentPID, LockPid]).
+	erpc:cast(LockNode, ataxia_lock, release_lock, [LockPid, {node(), ParentPID}]).
 
 -spec janitor (#state{}) -> 'ok'.
 janitor (State) ->
