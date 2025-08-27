@@ -24,6 +24,7 @@
 		new/0,
 		request_lock/4,
 		release_lock/2,
+		store_lock/2,
 		release_all/1,
 		janitor/1
 	]
@@ -124,6 +125,11 @@ request_lock (DB, ID, Mode, Janitor) ->
 release_lock ({LockNode, LockPid}, Janitor) ->
 	release_lock(self(), LockNode, LockPid),
 	Janitor ! {remove, {LockNode, LockPid}},
+	ok.
+
+-spec store_lock (ataxia_network:proc(), pid()) -> ok.
+store_lock ({LockNode, LockPid}, Janitor) ->
+	Janitor ! {store, {LockNode, LockPid}},
 	ok.
 
 -spec release_all (pid()) -> ok.

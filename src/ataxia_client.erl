@@ -43,6 +43,7 @@
 		add_at/5,
 
 		fetch/4,
+		fetch_if_new/6,
 		blind_update/5,
 		safe_update/7,
 		blind_update_then_fetch/5,
@@ -305,6 +306,35 @@ add (S0Client, DB, Lock, Value) ->
 	}.
 fetch (Client, DB, ID, Lock) ->
 	request(Client, DB, ID, {fetch, DB, ID, Lock}).
+
+-spec fetch_if_new
+	(
+		type(),
+		atom(),
+		ataxia_id:type(),
+		ataxia_lock:message(),
+		non_neg_integer(),
+		any()
+	)
+	->
+	{
+		type(),
+		(
+			'ok'
+			| {'ok', ataxia_network:proc()}
+			| {'ok', non_neg_integer(), any()}
+			|
+			{
+				'ok',
+				ataxia_network:proc(),
+				non_neg_integer(),
+				any()
+			}
+			| ataxia_error:type()
+		)
+	}.
+fetch_if_new (Client, DB, ID, Lock, Version, Value) ->
+	request(Client, DB, ID, {fetch_if_new, DB, ID, Lock, Version, Value}).
 
 -spec blind_update
 	(

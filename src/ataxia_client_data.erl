@@ -32,6 +32,8 @@
 		new/5,
 
 		add_update/3,
+		update_to/4,
+		set_lock/2,
 
 		get_database/1,
 		get_id/1,
@@ -75,6 +77,25 @@ add_update (Update, NewValue, ClientData) ->
 		updates = [Update|ClientData#data.updates],
 		value = NewValue
 	}.
+
+-spec update_to
+	(
+		ataxia_network:proc(),
+		non_neg_integer(),
+		any(),
+		type()
+	)
+	-> type().
+update_to (NewLock, NewVersion, NewValue, ClientData) ->
+	ClientData#data
+	{
+		lock = NewLock,
+		version = NewVersion,
+		value = NewValue
+	}.
+
+-spec set_lock (ataxia_network:proc(), type()) -> type().
+set_lock (NewLock, ClientData) -> ClientData#data{ lock = NewLock }.
 
 -spec get_database (type()) -> atom().
 get_database (#data{ db = Result }) -> Result.

@@ -188,6 +188,93 @@ handle_cast
 	end;
 handle_cast
 (
+	{request, ReplyTo, RequestID, {fetch_if_new, DB, ID, Lock, Version, Value}},
+	_State
+) ->
+	Request = [ataxia_network:as_proc(ReplyTo), DB, ID, Lock, Version],
+	case ataxia_network:call(DB, ID, ataxia_server, fetch, Request) of
+		{ok, ok} ->
+			reply_to
+			(
+				ReplyTo,
+				RequestID,
+				ok
+			),
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = Version,
+					value = Value
+				},
+				?CACHE_TIMEOUT
+			};
+
+		{ok, NewLock, ok} ->
+			reply_to
+			(
+				ReplyTo,
+				RequestID,
+				{ok, NewLock}
+			),
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = Version,
+					value = Value
+				},
+				?CACHE_TIMEOUT
+			};
+
+		{ok, NewLock, {NewVersion, NewValue}} ->
+			reply_to
+			(
+				ReplyTo,
+				RequestID,
+				{ok, NewLock, NewVersion, NewValue}
+			),
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = NewVersion,
+					value = NewValue
+				},
+				?CACHE_TIMEOUT
+			};
+
+		{ok, {NewVersion, NewValue}} ->
+			reply_to
+			(
+				ReplyTo,
+				RequestID,
+				{ok, NewVersion, NewValue}
+			),
+			{
+				noreply,
+				#cache_entry
+				{
+					db = DB,
+					id = ID,
+					version = NewVersion,
+					value = NewValue
+				},
+				?CACHE_TIMEOUT
+			};
+
+		Error ->
+			reply_to(ReplyTo, RequestID, Error),
+			{stop, {shutdown, {DB, ID, self()}}, none}
+	end;
+handle_cast
+(
 	{request, ReplyTo, RequestID, {blind_update, DB, ID, Lock, Op}},
 	_State
 ) ->
