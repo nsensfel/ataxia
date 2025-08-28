@@ -81,7 +81,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LOCAL FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec apply_to (type(), any(), dict:dict(variable(), type())) -> any().
+-spec apply_to (type(), any(), #{variable() => type()}) -> any().
 apply_to (#upfield{ ix = IX, op = OP}, Val, Mem) ->
 	setelement(IX, Val, apply_to(OP, element(IX, Val), Mem));
 apply_to (#field{ ix = IX, op = OP}, Val, Mem) ->
@@ -109,7 +109,7 @@ apply_to (#const{ value = Val }, _Val, _Mem) ->
 apply_to (#current{}, Val, _Mem) ->
 	Val;
 apply_to (#var{ name = Name }, _Val, Mem) ->
-	dict:fetch(Name, Mem);
+	maps:get(Name, Mem);
 
 apply_to (#ge{ p0 = P0, p1 = P1 }, Val, Mem) ->
 	apply_to(P0, Val, Mem) >= apply_to(P1, Val, Mem);
@@ -144,7 +144,7 @@ apply_to (#letr{ bindings = Bindings, op = OP }, Val, S0Mem) ->
 		lists:foldl
 		(
 			fun ({Key, Value}, Memory) ->
-				dict:store(Key, apply_to(Value, Val, Memory), Memory)
+				maps:update(Key, apply_to(Value, Val, Memory), Memory)
 			end,
 			S0Mem,
 			Bindings
@@ -213,7 +213,7 @@ variable (Name) -> #var{ name = Name }.
 
 %%%%% APPLY TO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec apply_to (type(), any()) -> any().
-apply_to (OP, Val) -> apply_to(OP, Val, dict:new()).
+apply_to (OP, Val) -> apply_to(OP, Val, maps:new()).
 
 -spec is_constant (type()) -> boolean().
 is_constant (#const{}) -> true;

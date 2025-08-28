@@ -9,7 +9,7 @@
 (
 	client,
 	{
-		known_cache_entries :: dict:dict({node(), pid()}, pid()),
+		known_cache_entries :: #{{node(), ataxia_id:type()} => pid()},
 		cache_managers :: ataxia_cache_manager:collection(),
 		next_request_id :: non_neg_integer()
 	}
@@ -118,7 +118,7 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 				Client#client
 				{
 					known_cache_entries =
-						dict:store
+						maps:update
 						(
 							{DB, ID},
 							NewEntryPID,
@@ -146,35 +146,18 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 )
 -> {type(), any()}.
 request (Client, DB, ID, Request) ->
-	case dict:find({DB, ID}, Client#client.known_cache_entries) of
-		{ok, EntryPID} ->
-			ataxia_cache_entry:request(EntryPID, 0, Request),
-			case is_process_alive(EntryPID) of
-				true -> await_reply(Client, DB, ID, Request, EntryPID, 0);
-				false -> request_new_handler_of(Client, DB, ID, Request, EntryPID)
-			end;
-
-		error -> request_new_handler_of(Client, DB, ID, Request, none)
+	EntryPID = maps:get({DB, ID}, Client#client.known_cache_entries),
+	ataxia_cache_entry:request(EntryPID, 0, Request),
+	case is_process_alive(EntryPID) of
+		true -> await_reply(Client, DB, ID, Request, EntryPID, 0);
+		false -> request_new_handler_of(Client, DB, ID, Request, EntryPID)
 	end.
-
--spec merge_cache_entry_dicts
-	(
-		type(),
-		atom(),
-		ataxia_id:type(),
-		(pid() | 'none'),
-		(pid() | 'none')
-	)
-	-> (pid() | 'none').
-merge_cache_entry_dicts (_Client, _DB, _ID, A, B) when A == B -> A;
-merge_cache_entry_dicts (Client, DB, ID, _A, _B) ->
-	ataxia_cache_manager:peek_entry_for(Client#client.cache_managers, DB, ID).
 
 -spec remove_cache_entry ({atom(), ataxia_id:type()}, type()) -> type().
 remove_cache_entry (Key, Client) ->
 	Client#client
 	{
-		known_cache_entries = dict:erase(Key, Client#client.known_cache_entries)
+		known_cache_entries = maps:remove(Key, Client#client.known_cache_entries)
 	}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -189,7 +172,7 @@ start_node_processes () ->
 new () ->
 	#client
 	{
-		known_cache_entries = dict:new(),
+		known_cache_entries = maps:new(),
 		cache_managers = ataxia_cache_manager:get_collection(),
 		next_request_id = 0
 	}.
@@ -199,15 +182,16 @@ merge (ClientA, ClientB) ->
 	ClientA#client
 	{
 		known_cache_entries =
-			dict:filter
+			maps:merge
 			(
-				fun (_Key, Value) -> Value /= none end,
-				dict:merge
+				maps:filter
 				(
-					fun ({DB, ID}, A, B) ->
-						merge_cache_entry_dicts(ClientA, DB, ID, A, B)
-					end,
-					ClientA#client.known_cache_entries,
+					fun (_Key, Value) -> Value /= none end,
+					ClientA#client.known_cache_entries
+				),
+				maps:filter
+				(
+					fun (_Key, Value) -> Value /= none end,
 					ClientB#client.known_cache_entries
 				)
 			)
