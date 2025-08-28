@@ -146,11 +146,15 @@ request_new_handler_of (Client, DB, ID, Request, EntryPID) ->
 )
 -> {type(), any()}.
 request (Client, DB, ID, Request) ->
-	EntryPID = maps:get({DB, ID}, Client#client.known_cache_entries),
-	ataxia_cache_entry:request(EntryPID, 0, Request),
-	case is_process_alive(EntryPID) of
-		true -> await_reply(Client, DB, ID, Request, EntryPID, 0);
-		false -> request_new_handler_of(Client, DB, ID, Request, EntryPID)
+	case maps:find({DB, ID}, Client#client.known_cache_entries) of
+		{ok, EntryPID} ->
+			ataxia_cache_entry:request(EntryPID, 0, Request),
+			case is_process_alive(EntryPID) of
+				true -> await_reply(Client, DB, ID, Request, EntryPID, 0);
+				false -> request_new_handler_of(Client, DB, ID, Request, EntryPID)
+			end;
+
+		error -> request_new_handler_of(Client, DB, ID, Request, none)
 	end.
 
 -spec remove_cache_entry ({atom(), ataxia_id:type()}, type()) -> type().
