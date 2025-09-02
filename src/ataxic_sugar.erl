@@ -18,6 +18,7 @@
 	[
 		update_array_cell/2,
 		update_orddict_element/2,
+		update_map_element/2,
 		update_ordset/2,
 		nop/0
 	]
@@ -89,6 +90,45 @@ update_orddict_element (IX, OP) ->
 								(
 									orddict,
 									fetch,
+									[
+										ataxic:constant(IX),
+										ataxic:current_value()
+									]
+								),
+								OP
+							]
+						)
+				end
+			),
+			ataxic:current_value()
+		]
+	).
+
+-spec update_map_element
+	(
+		any(),
+		ataxic:type()
+	)
+	-> ataxic:type().
+update_map_element (_IX, #current{}) -> nop();
+update_map_element (IX, OP) ->
+	ataxic:apply_function
+	(
+		maps,
+		put,
+		[
+			ataxic:constant(IX),
+			(
+				case ataxic:is_constant(OP) of
+					true -> OP;
+					false ->
+						ataxic:sequence
+						(
+							[
+								ataxic:apply_function
+								(
+									maps,
+									get,
 									[
 										ataxic:constant(IX),
 										ataxic:current_value()
