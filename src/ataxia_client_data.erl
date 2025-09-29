@@ -35,6 +35,8 @@
 		add_update/3,
 		update_to/4,
 		set_lock/2,
+		clear_updates/1,
+		set_version/2,
 
 		get_database/1,
 		get_id/1,
@@ -92,9 +94,16 @@ update_to (NewLock, NewVersion, NewValue, ClientData) ->
 	ClientData#data
 	{
 		lock = NewLock,
+		updates = [],
 		version = NewVersion,
 		value = NewValue
 	}.
+
+-spec clear_updates (type(A)) -> type(A).
+clear_updates (ClientData) -> ClientData#data{ updates = [] }.
+
+-spec set_version (non_neg_integer(), type(A)) -> type(A).
+set_version (Version, ClientData) -> ClientData#data{ version = Version }.
 
 -spec set_lock (ataxia_network:proc(), type(A)) -> type(A).
 set_lock (NewLock, ClientData) -> ClientData#data{ lock = NewLock }.
