@@ -40,6 +40,7 @@
 		get_id/1,
 		get_lock/1,
 		get_ataxic/1,
+		get_version/1,
 		get_value/1
 	]
 ).
@@ -109,6 +110,10 @@ get_lock (#data{ lock = Result }) -> Result.
 
 -spec get_value (type(A)) -> A.
 get_value (#data{ value = Result }) -> Result.
+
+-spec get_version (type(_)) -> non_neg_integer().
+get_version (#data{ version = Result }) -> Result.
+
 
 -spec get_ataxic (type(_)) -> ataxic:type().
 get_ataxic (#data{ updates = Updates }) ->

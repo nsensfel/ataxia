@@ -249,6 +249,62 @@ optimize_update_orddict_sequence (List) ->
 		end
 	).
 
+-spec optimize_update_map_sequence (list(ataxic:type())) -> ataxic:type().
+optimize_update_map_sequence (List) ->
+	optimize_generic_update_sequence
+	(
+		List,
+		[],
+		fun (E) ->
+			case E of
+				#apply_fun
+				{
+					module = maps,
+					function = put,
+					params = [ConstIX1, OP, #current{}]
+				} ->
+					case OP of
+						#const{} -> true;
+						#seq
+						{
+							ops =
+								[
+									#apply_fun
+									{
+										module = maps,
+										function = get,
+										params = [ConstIX2, #current{}]
+									},
+									_
+								]
+					} -> (ConstIX1 == ConstIX2);
+					_ -> false
+				end;
+
+				_ -> false
+			end
+		end,
+		fun (A, B) ->
+			[AIX|_] = A#apply_fun.params,
+			[BIX|_] = B#apply_fun.params,
+			(AIX =< BIX)
+		end,
+		fun ataxic_sugar:update_map_element/2,
+		fun (E) ->
+			[_,StoreOP|_] = E#apply_fun.params,
+			case StoreOP of
+				#const{} -> StoreOP;
+				#seq{ ops = [_FetchOP|ActualUpdateOP]} ->
+					ataxic:sequence(ActualUpdateOP);
+				_ -> error(bad_optimize)
+			end
+		end,
+		fun (E) ->
+			[#const{ value = IX }|_] = E#apply_fun.params,
+			IX
+		end
+	).
+
 -spec flatten_sequence (list(ataxic:type())) -> list(ataxic:type()).
 flatten_sequence (OPs) ->
 	lists:foldr
@@ -284,19 +340,27 @@ aggressive (#seq{ ops = S0OPs }) ->
 	S1Result =
 		case S0Result of
 			#seq{ ops = S4OPs } -> optimize_update_orddict_sequence(S4OPs);
+
 			_ -> S0Result
 		end,
 
 	S2Result =
 		case S1Result of
-			#seq{ ops = S5OPs } ->
-				#seq{ ops = remove_overridden_operations(S5OPs) };
+			#seq{ ops = S5OPs } -> optimize_update_map_sequence(S5OPs);
+
 			_ -> S1Result
 		end,
 
-	case S2Result of
+	S3Result =
+		case S2Result of
+			#seq{ ops = S6OPs } ->
+				#seq{ ops = remove_overridden_operations(S6OPs) };
+			_ -> S2Result
+		end,
+
+	case S3Result of
 		#seq{ ops = [OP] } -> OP;
-		_ -> S2Result
+		_ -> S3Result
 	end;
 aggressive (In = #apply_fun{ params = OPs }) ->
 	In#apply_fun

@@ -45,6 +45,7 @@
 		fetch/4,
 		fetch_if_new/6,
 		blind_update/5,
+		safe_update/2,
 		safe_update/7,
 		blind_update_then_fetch/5,
 		blind_remove/4,
@@ -379,6 +380,28 @@ safe_update
 		DB,
 		ID,
 		{safe_update, DB, ID, Lock, Op, ExpectedCurrentVersion, ExpectedNewValue}
+	).
+
+-spec safe_update (type(), ataxia_client_data:type())
+	->
+	{
+		type(),
+		(
+			{'ok', non_neg_integer()}
+			| {'ok', ataxia_network:proc(), non_neg_integer()}
+			| ataxia_error:type()
+		)
+	}.
+safe_update (Client, AtaxiaClientData) ->
+	safe_update
+	(
+		Client,
+		ataxia_client_data:get_database(AtaxiaClientData),
+		ataxia_client_data:get_id(AtaxiaClientData),
+		ataxia_client_data:get_lock(AtaxiaClientData),
+		ataxic_optimize:aggressive(ataxia_client_data:get_ataxic(AtaxiaClientData)),
+		ataxia_client_data:get_version(AtaxiaClientData),
+		ataxia_client_data:get_value(AtaxiaClientData)
 	).
 
 -spec blind_update_then_fetch
