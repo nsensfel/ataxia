@@ -118,15 +118,15 @@ write (DB, ID, Entry) ->
 	case PreviousValue == error of
 		false ->
 			case PreviousValue == BaseData of
-				false -> file:write_file(Base, PreviousValue);
+				false -> file:write_file(Base, PreviousValue, [sync]);
 				_ -> ok
 			end,
 			case PreviousValue == Copy1Data of
-				false -> file:write_file(Copy1, PreviousValue);
+				false -> file:write_file(Copy1, PreviousValue, [sync]);
 				_ -> ok
 			end,
 			case PreviousValue == Copy0Data of
-				false -> file:write_file(Copy0, PreviousValue);
+				false -> file:write_file(Copy0, PreviousValue, [sync]);
 				_ -> ok
 			end;
 
